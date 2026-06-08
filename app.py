@@ -374,29 +374,6 @@ def api_daily():
         return jsonify({"error": str(exc)}), 500
 
 
-@app.route("/api/admin/cleanup-test", methods=["POST"])
-def api_cleanup_test():
-    """Remove synthetic smoke-test rows. Protected by the same push API key."""
-    api_key = os.environ.get("PUSH_API_KEY", "")
-    provided = request.headers.get("X-API-Key", "")
-    if not provided or provided != api_key:
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        if USE_POSTGRES:
-            cur.execute("DELETE FROM crossings WHERE track_id = %s AND direction = %s", (999001, "test"))
-        else:
-            cur.execute("DELETE FROM crossings WHERE track_id = ? AND direction = ?", (999001, "test"))
-        deleted = cur.rowcount
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({"deleted": deleted}), 200
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
-
 @app.route("/api/push", methods=["POST"])
 def api_push():
     """Receive a batch of crossing events from the local counter."""
