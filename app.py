@@ -208,13 +208,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
+  plugins: { legend: { display: true, labels: { color: '#aaa', boxWidth: 12, font: { size: 10 } } } },
   scales: {
     x: {
+      stacked: true,
       ticks: { color: '#888', maxRotation: 45 },
       grid: { color: '#2a2a2a' }
     },
     y: {
+      stacked: true,
       ticks: { color: '#888' },
       grid: { color: '#2a2a2a' },
       beginAtZero: true
@@ -222,21 +224,55 @@ const CHART_DEFAULTS = {
   }
 };
 
+// Canonical class_id → display name
+const CLASS_NAMES = { 1: 'Bicycle', 3: 'Moped', 100: 'Scooter' };
+// Per category + direction palette (6 series)
+const SERIES_PALETTE = {
+  'Bicycle →in':  '#4caf50', 'Bicycle out→': '#2196f3',
+  'Moped →in':    '#8bc34a', 'Moped out→':   '#03a9f4',
+  'Scooter →in':  '#ffb300', 'Scooter out→': '#ff7043',
+};
+const FALLBACK = ['#4caf50','#2196f3','#8bc34a','#03a9f4','#ffb300','#ff7043'];
+
 let hourlyChart, dailyChart;
 
-function makeBar(ctx, labels, data, color) {
+// Build stacked datasets keyed by category+direction. Returns {labels, datasets, total}.
+function buildStacked(rows) {
+  const labels = [...new Set(rows.map(r => r.label))].sort();
+  const series = {};
+  let total = 0;
+  rows.forEach(r => {
+    const cname = CLASS_NAMES[r.class_id] || ('Class ' + r.class_id);
+    const key = r.direction === 'in' ? (cname + ' →in') : (cname + ' out→');
+    if (!series[key]) series[key] = new Array(labels.length).fill(0);
+    const idx = labels.indexOf(r.label);
+    if (idx >= 0) series[key][idx] += r.count;
+    total += r.count;
+  });
+  const datasets = Object.entries(series).map(([label, data], i) => {
+    const color = SERIES_PALETTE[label] || FALLBACK[i % FALLBACK.length];
+    return {
+      label, data,
+      backgroundColor: color + 'cc',
+      borderColor: color,
+      borderWidth: 1,
+      borderRadius: 3,
+    };
+  });
+  return { labels, datasets, total };
+}
+
+// Sum totals per label across all series (for stat cards).
+function perLabelTotals(rows) {
+  const m = {};
+  rows.forEach(r => { m[r.label] = (m[r.label] || 0) + r.count; });
+  return m;
+}
+
+function makeStacked(ctx, labels, datasets) {
   return new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: color + 'cc',
-        borderColor: color,
-        borderWidth: 1,
-        borderRadius: 4
-      }]
-    },
+    data: { labels, datasets },
     options: { ...CHART_DEFAULTS }
   });
 }
@@ -250,38 +286,39 @@ async function fetchAndRender() {
     const hourly = await hRes.json();
     const daily  = await dRes.json();
 
-    // Hourly chart
-    const hLabels = hourly.map(r => r.hour);
-    const hData   = hourly.map(r => r.count);
+    // Hourly chart (stacked per category+direction)
+    const h = buildStacked(hourly);
     if (hourlyChart) {
-      hourlyChart.data.labels = hLabels;
-      hourlyChart.data.datasets[0].data = hData;
+      hourlyChart.data.labels = h.labels;
+      hourlyChart.data.datasets = h.datasets;
       hourlyChart.update();
     } else {
-      hourlyChart = makeBar(
+      hourlyChart = makeStacked(
         document.getElementById('hourlyChart').getContext('2d'),
-        hLabels, hData, '#4fc3f7'
+        h.labels, h.datasets
       );
     }
 
-    // Daily chart
-    const dLabels = daily.map(r => r.date);
-    const dData   = daily.map(r => r.count);
+    // Daily chart (stacked per category+direction)
+    const d = buildStacked(daily);
     if (dailyChart) {
-      dailyChart.data.labels = dLabels;
-      dailyChart.data.datasets[0].data = dData;
+      dailyChart.data.labels = d.labels;
+      dailyChart.data.datasets = d.datasets;
       dailyChart.update();
     } else {
-      dailyChart = makeBar(
+      dailyChart = makeStacked(
         document.getElementById('dailyChart').getContext('2d'),
-        dLabels, dData, '#81c784'
+        d.labels, d.datasets
       );
     }
 
-    // Stats
-    const today = dData.length ? dData[dData.length - 1] : 0;
-    const week  = dData.slice(-7).reduce((a, b) => a + b, 0);
-    const total = dData.reduce((a, b) => a + b, 0);
+    // Stats — computed from the summed daily series
+    const dayTotals = perLabelTotals(daily);
+    const dayKeys = Object.keys(dayTotals).sort();
+    const dayValues = dayKeys.map(k => dayTotals[k]);
+    const today = dayValues.length ? dayValues[dayValues.length - 1] : 0;
+    const week  = dayValues.slice(-7).reduce((a, b) => a + b, 0);
+    const total = dayValues.reduce((a, b) => a + b, 0);
     document.getElementById('stat-today').textContent = today.toLocaleString();
     document.getElementById('stat-week').textContent  = week.toLocaleString();
     document.getElementById('stat-total').textContent = total.toLocaleString();
@@ -308,68 +345,82 @@ def index():
 
 @app.route("/api/hourly")
 def api_hourly():
-    """Return counts grouped by hour for the last 24 hours."""
+    """Return counts grouped by hour, direction, and class_id for the last 24 hours."""
     try:
         conn = get_conn()
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute("""
                 SELECT
-                    to_char(ts::timestamp, 'HH24:00') AS hour,
+                    to_char(ts::timestamp, 'HH24:00') AS label,
+                    direction,
+                    class_id,
                     COUNT(*) AS cnt
                 FROM crossings
                 WHERE ts::timestamp >= NOW() - INTERVAL '24 hours'
-                GROUP BY hour
-                ORDER BY hour
+                GROUP BY label, direction, class_id
+                ORDER BY label
             """)
         else:
             cur.execute("""
                 SELECT
-                    strftime('%H:00', ts) AS hour,
+                    strftime('%H:00', ts) AS label,
+                    direction,
+                    class_id,
                     COUNT(*) AS cnt
                 FROM crossings
                 WHERE ts >= datetime('now', '-24 hours')
-                GROUP BY hour
-                ORDER BY hour
+                GROUP BY label, direction, class_id
+                ORDER BY label
             """)
         rows = cur.fetchall()
         cur.close()
         conn.close()
-        return jsonify([{"hour": r[0], "count": r[1]} for r in rows])
+        return jsonify([
+            {"label": r[0], "direction": r[1], "class_id": r[2], "count": r[3]}
+            for r in rows
+        ])
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/daily")
 def api_daily():
-    """Return counts grouped by date for the last 30 days."""
+    """Return counts grouped by date, direction, and class_id for the last 30 days."""
     try:
         conn = get_conn()
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute("""
                 SELECT
-                    to_char(ts::timestamp, 'YYYY-MM-DD') AS date,
+                    to_char(ts::timestamp, 'YYYY-MM-DD') AS label,
+                    direction,
+                    class_id,
                     COUNT(*) AS cnt
                 FROM crossings
                 WHERE ts::timestamp >= NOW() - INTERVAL '30 days'
-                GROUP BY date
-                ORDER BY date
+                GROUP BY label, direction, class_id
+                ORDER BY label
             """)
         else:
             cur.execute("""
                 SELECT
-                    strftime('%Y-%m-%d', ts) AS date,
+                    strftime('%Y-%m-%d', ts) AS label,
+                    direction,
+                    class_id,
                     COUNT(*) AS cnt
                 FROM crossings
                 WHERE ts >= datetime('now', '-30 days')
-                GROUP BY date
-                ORDER BY date
+                GROUP BY label, direction, class_id
+                ORDER BY label
             """)
         rows = cur.fetchall()
         cur.close()
         conn.close()
-        return jsonify([{"date": r[0], "count": r[1]} for r in rows])
+        return jsonify([
+            {"label": r[0], "direction": r[1], "class_id": r[2], "count": r[3]}
+            for r in rows
+        ])
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
