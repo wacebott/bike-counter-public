@@ -263,7 +263,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 const CLASS_INFO = [
   { id: 1,   label: '🚲 Bicycle', color: '#4caf50' },
   { id: 2,   label: '🚗 Car',     color: '#2196f3' },
-  { id: 3,   label: '🛵 Moped',   color: '#8bc34a' },
+  { id: 3,   label: '🛵 Moped',   color: '#00bcd4' },
   { id: 5,   label: '🚌 Bus',     color: '#ff9800' },
   { id: 7,   label: '🚛 Truck',   color: '#f44336' },
   { id: 100, label: '🛴 Scooter', color: '#9c27b0' },
