@@ -201,7 +201,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  Data refreshes automatically &bull; Powered by a Raspberry Pi &amp; YOLO detection
+  Data refreshes automatically &bull; Powered by YOLO detection
 </footer>
 
 <script>
