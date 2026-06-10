@@ -402,7 +402,7 @@ def api_hourly():
         if USE_POSTGRES:
             cur.execute("""
                 SELECT
-                    to_char(ts::timestamp, 'HH24:00') AS label,
+                    to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'HH24:00') AS label,
                     direction,
                     class_id,
                     COUNT(*) AS cnt
@@ -443,7 +443,7 @@ def api_daily():
         if USE_POSTGRES:
             cur.execute("""
                 SELECT
-                    to_char(ts::timestamp, 'YYYY-MM-DD') AS label,
+                    to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'YYYY-MM-DD') AS label,
                     direction,
                     class_id,
                     COUNT(*) AS cnt
@@ -630,7 +630,12 @@ function showStatus(msg, type='ok', ms=2500) {
 }
 function confClass(c) { return c < 0.45 ? 'low' : c < 0.60 ? 'mid' : 'high'; }
 function formatTs(ts) {
-  try { return new Date(ts.endsWith('Z') ? ts : ts + 'Z').toLocaleString(); } catch { return ts; }
+  try {
+    return new Date(ts.endsWith('Z') ? ts : ts + 'Z').toLocaleString('en-CA', {
+      timeZone: 'America/Halifax', year: 'numeric', month: 'short',
+      day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return ts; }
 }
 
 function renderItems(items) {
