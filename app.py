@@ -196,9 +196,32 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     table.dtable td.bike-pct-cell { color: #81c784; font-weight: 600; }
 
     footer { text-align: center; margin-top: 40px; color: #555; font-size: 0.8rem; }
+
+    /* ── Light mode ── */
+    body.light { background: #f5f5f5; color: #111; }
+    body.light .stat { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    body.light .grid-wrap, body.light .daily-wrap { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    body.light table.hgrid th, body.light table.dtable th { color: #555; }
+    body.light table.hgrid th, body.light table.hgrid td,
+    body.light table.dtable th, body.light table.dtable td { border-bottom-color: #e0e0e0; }
+    body.light table.hgrid tr.total-row td { border-top-color: #ccc; color: #111; }
+    body.light table.hgrid td.type-label, body.light table.dtable td:first-child { color: #333; }
+    body.light footer { color: #aaa; }
+    body.light header p.subtitle { color: #666; }
+    body.light .section-title { color: #666; }
+
+    #theme-btn {
+      position: fixed; top: 14px; right: 16px;
+      background: #2a2a2a; border: none; border-radius: 20px;
+      color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
+      cursor: pointer; z-index: 100; transition: background 0.2s;
+    }
+    body.light #theme-btn { background: #ddd; color: #333; }
   </style>
 </head>
 <body>
+
+<button id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
 
 <header>
   <h1>🚲 Bike Lane Counter</h1>
@@ -381,6 +404,17 @@ async function fetchAndRender() {
 
 fetchAndRender();
 setInterval(fetchAndRender, 5 * 60 * 1000);
+
+function toggleTheme() {
+  const light = document.body.classList.toggle('light');
+  document.getElementById('theme-btn').textContent = light ? '🌙 Dark' : '☀️ Light';
+  localStorage.setItem('theme', light ? 'light' : 'dark');
+}
+// Restore saved preference
+if (localStorage.getItem('theme') === 'light') {
+  document.body.classList.add('light');
+  document.getElementById('theme-btn').textContent = '🌙 Dark';
+}
 </script>
 </body>
 </html>
@@ -408,7 +442,8 @@ def api_hourly():
                     class_id,
                     COUNT(*) AS cnt
                 FROM crossings
-                WHERE ts::timestamp >= NOW() - INTERVAL '24 hours'
+                WHERE (ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax')::date
+                      = (NOW() AT TIME ZONE 'America/Halifax')::date
                 GROUP BY label, direction, class_id
                 ORDER BY label
             """)
