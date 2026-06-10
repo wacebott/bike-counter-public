@@ -225,12 +225,15 @@ const CHART_DEFAULTS = {
 };
 
 // Canonical class_id → display name
-const CLASS_NAMES = { 1: 'Bicycle', 3: 'Moped', 100: 'Scooter' };
-// Per category + direction palette (6 series)
+const CLASS_NAMES = { 1: 'Bicycle', 2: 'Car', 3: 'Moped', 5: 'Bus', 7: 'Truck', 100: 'Scooter' };
+// Per category + direction palette (12 series)
 const SERIES_PALETTE = {
-  'Bicycle →in':  '#4caf50', 'Bicycle out→': '#2196f3',
-  'Moped →in':    '#8bc34a', 'Moped out→':   '#03a9f4',
-  'Scooter →in':  '#ffb300', 'Scooter out→': '#ff7043',
+  'Bicycle →in':  '#4caf50', 'Bicycle out→': '#81c784',
+  'Car →in':      '#2196f3', 'Car out→':     '#64b5f6',
+  'Moped →in':    '#8bc34a', 'Moped out→':   '#aed581',
+  'Bus →in':      '#ff9800', 'Bus out→':     '#ffb74d',
+  'Truck →in':    '#f44336', 'Truck out→':   '#e57373',
+  'Scooter →in':  '#9c27b0', 'Scooter out→': '#ce93d8',
 };
 const FALLBACK = ['#4caf50','#2196f3','#8bc34a','#03a9f4','#ffb300','#ff7043'];
 
