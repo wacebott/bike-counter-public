@@ -277,14 +277,15 @@ function heatStyle(val, max, hexColor) {
 
 function buildHourlyGrid(rows) {
   const agg = aggregate(rows);
-  const hours = Object.keys(agg).sort();
+  // Always show all 24 hours so there are no gaps
+  const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2,'0') + ':00');
   const classes = activeClasses(agg);
-  if (!hours.length) return '<p style="color:#555;padding:20px 0">No data yet</p>';
+  if (!classes.length) return '<p style="color:#555;padding:20px 0">No data yet</p>';
 
   // Find max per class for heat scaling
   const maxPerClass = {};
   classes.forEach(id => {
-    maxPerClass[id] = Math.max(...hours.map(h => agg[h][id] || 0));
+    maxPerClass[id] = Math.max(...hours.map(h => (agg[h] && agg[h][id]) || 0));
   });
 
   let html = '<table class="hgrid"><thead><tr><th></th>';
@@ -293,10 +294,10 @@ function buildHourlyGrid(rows) {
 
   classes.forEach(id => {
     const info = CLASS_MAP[id] || { label: 'Class ' + id, color: '#888' };
-    const rowTotal = hours.reduce((s, h) => s + (agg[h][id] || 0), 0);
+    const rowTotal = hours.reduce((s, h) => s + ((agg[h] && agg[h][id]) || 0), 0);
     html += `<tr><td class="type-label">${info.label}</td>`;
     hours.forEach(h => {
-      const v = agg[h][id] || 0;
+      const v = (agg[h] && agg[h][id]) || 0;
       const style = v ? heatStyle(v, maxPerClass[id], info.color) : '';
       html += `<td class="heat" style="${style}">${v || '·'}</td>`;
     });
@@ -307,7 +308,7 @@ function buildHourlyGrid(rows) {
   html += '<tr class="total-row"><td class="type-label">Total</td>';
   let grandTotal = 0;
   hours.forEach(h => {
-    const colTotal = classes.reduce((s, id) => s + (agg[h][id] || 0), 0);
+    const colTotal = classes.reduce((s, id) => s + ((agg[h] && agg[h][id]) || 0), 0);
     grandTotal += colTotal;
     html += `<td>${colTotal || '·'}</td>`;
   });
