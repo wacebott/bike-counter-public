@@ -108,8 +108,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚲 Bike Lane Counter — Public View</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <title>🚲 Bike Lane Counter</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -119,240 +118,260 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       min-height: 100vh;
       padding: 24px 16px 48px;
     }
-    header {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    header h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-    }
-    header p.subtitle {
-      margin-top: 6px;
-      color: #888;
-      font-size: 0.9rem;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-      gap: 24px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .card {
-      background: #1e1e1e;
-      border-radius: 12px;
-      padding: 20px 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-    }
-    .card h2 {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #aaa;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 16px;
-    }
-    .chart-wrap {
-      position: relative;
-      height: 260px;
-    }
-    footer {
-      text-align: center;
-      margin-top: 40px;
-      color: #555;
-      font-size: 0.8rem;
-    }
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 260px;
-      color: #555;
-      font-size: 0.9rem;
-    }
+    header { text-align: center; margin-bottom: 28px; }
+    header h1 { font-size: 1.8rem; font-weight: 700; }
+    header p.subtitle { margin-top: 6px; color: #888; font-size: 0.85rem; }
+
+    /* ── Stat cards ── */
     .stat-row {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
+      display: flex; gap: 14px; justify-content: center;
+      margin-bottom: 28px; flex-wrap: wrap;
     }
     .stat {
-      background: #1e1e1e;
-      border-radius: 10px;
-      padding: 14px 28px;
-      text-align: center;
-      min-width: 140px;
+      background: #1e1e1e; border-radius: 10px;
+      padding: 14px 24px; text-align: center; min-width: 130px;
     }
-    .stat .value {
-      font-size: 2.2rem;
-      font-weight: 700;
-      color: #4fc3f7;
-    }
+    .stat .value { font-size: 2rem; font-weight: 700; color: #4fc3f7; }
+    .stat .value.bike-pct { color: #81c784; }
     .stat .label {
-      font-size: 0.78rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-top: 4px;
+      font-size: 0.72rem; color: #888;
+      text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px;
     }
+
+    /* ── Section headings ── */
+    .section-title {
+      font-size: 0.78rem; font-weight: 600; color: #888;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin: 0 0 12px 0;
+    }
+
+    /* ── Hourly grid ── */
+    .grid-wrap {
+      max-width: 1300px; margin: 0 auto 32px;
+      background: #1e1e1e; border-radius: 12px;
+      padding: 20px 18px; overflow-x: auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    table.hgrid {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+    table.hgrid th, table.hgrid td {
+      padding: 6px 8px;
+      text-align: right;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    table.hgrid th { color: #888; font-weight: 500; }
+    table.hgrid td.type-label {
+      text-align: left; font-weight: 600; color: #ccc;
+      padding-right: 16px; white-space: nowrap;
+    }
+    table.hgrid tr.total-row td {
+      border-top: 2px solid #333; font-weight: 700; color: #e0e0e0;
+      padding-top: 8px;
+    }
+    /* heat-map colouring applied via inline style */
+    td.heat { border-radius: 4px; }
+
+    /* ── Daily summary table ── */
+    .daily-wrap {
+      max-width: 1300px; margin: 0 auto 32px;
+      background: #1e1e1e; border-radius: 12px;
+      padding: 20px 18px; overflow-x: auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    table.dtable {
+      border-collapse: collapse; width: 100%;
+      font-size: 0.82rem; white-space: nowrap;
+    }
+    table.dtable th, table.dtable td {
+      padding: 6px 12px;
+      text-align: right;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    table.dtable th { color: #888; font-weight: 500; }
+    table.dtable td:first-child { text-align: left; color: #aaa; }
+    table.dtable td.bike-pct-cell { color: #81c784; font-weight: 600; }
+
+    footer { text-align: center; margin-top: 40px; color: #555; font-size: 0.8rem; }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>🚲 Bike Lane Counter — Public View</h1>
-  <p class="subtitle">Updated every 15 minutes from the local counter.</p>
+  <h1>🚲 Bike Lane Counter</h1>
+  <p class="subtitle">Updated every 15 minutes · counts are combined in + out</p>
 </header>
 
-<div class="stat-row" id="stats">
-  <div class="stat"><div class="value" id="stat-today">—</div><div class="label">Today</div></div>
-  <div class="stat"><div class="value" id="stat-week">—</div><div class="label">This Week</div></div>
-  <div class="stat"><div class="value" id="stat-total">—</div><div class="label">All Time</div></div>
-</div>
-
-<div class="grid">
-  <div class="card">
-    <h2>Hourly Activity (last 24 h)</h2>
-    <div class="chart-wrap">
-      <canvas id="hourlyChart"></canvas>
-    </div>
+<div class="stat-row">
+  <div class="stat">
+    <div class="value" id="stat-bikes-today">—</div>
+    <div class="label">Bikes Today</div>
   </div>
-  <div class="card">
-    <h2>Daily Totals (last 30 days)</h2>
-    <div class="chart-wrap">
-      <canvas id="dailyChart"></canvas>
-    </div>
+  <div class="stat">
+    <div class="value bike-pct" id="stat-bike-pct">—</div>
+    <div class="label">Bike % of Traffic Today</div>
+  </div>
+  <div class="stat">
+    <div class="value" id="stat-total-today">—</div>
+    <div class="label">All Traffic Today</div>
+  </div>
+  <div class="stat">
+    <div class="value" id="stat-bikes-week">—</div>
+    <div class="label">Bikes This Week</div>
   </div>
 </div>
 
-<footer>
-  Data refreshes automatically &bull; Powered by YOLO detection
-</footer>
+<div class="grid-wrap">
+  <p class="section-title">Hourly counts — last 24 hours</p>
+  <div id="hourly-grid">Loading…</div>
+</div>
+
+<div class="daily-wrap">
+  <p class="section-title">Daily summary — last 30 days</p>
+  <div id="daily-table">Loading…</div>
+</div>
+
+<footer>Data refreshes automatically &bull; Powered by YOLO detection</footer>
 
 <script>
-const CHART_DEFAULTS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: true, labels: { color: '#aaa', boxWidth: 12, font: { size: 10 } } } },
-  scales: {
-    x: {
-      stacked: true,
-      ticks: { color: '#888', maxRotation: 45 },
-      grid: { color: '#2a2a2a' }
-    },
-    y: {
-      stacked: true,
-      ticks: { color: '#888' },
-      grid: { color: '#2a2a2a' },
-      beginAtZero: true
-    }
-  }
-};
+const CLASS_INFO = [
+  { id: 1,   label: '🚲 Bicycle', color: '#4caf50' },
+  { id: 2,   label: '🚗 Car',     color: '#2196f3' },
+  { id: 3,   label: '🛵 Moped',   color: '#8bc34a' },
+  { id: 5,   label: '🚌 Bus',     color: '#ff9800' },
+  { id: 7,   label: '🚛 Truck',   color: '#f44336' },
+  { id: 100, label: '🛴 Scooter', color: '#9c27b0' },
+];
+const CLASS_IDS = CLASS_INFO.map(c => c.id);
+const CLASS_MAP = Object.fromEntries(CLASS_INFO.map(c => [c.id, c]));
 
-// Canonical class_id → display name
-const CLASS_NAMES = { 1: 'Bicycle', 2: 'Car', 3: 'Moped', 5: 'Bus', 7: 'Truck', 100: 'Scooter' };
-// Per category + direction palette (12 series)
-const SERIES_PALETTE = {
-  'Bicycle →in':  '#4caf50', 'Bicycle out→': '#81c784',
-  'Car →in':      '#2196f3', 'Car out→':     '#64b5f6',
-  'Moped →in':    '#8bc34a', 'Moped out→':   '#aed581',
-  'Bus →in':      '#ff9800', 'Bus out→':     '#ffb74d',
-  'Truck →in':    '#f44336', 'Truck out→':   '#e57373',
-  'Scooter →in':  '#9c27b0', 'Scooter out→': '#ce93d8',
-};
-const FALLBACK = ['#4caf50','#2196f3','#8bc34a','#03a9f4','#ffb300','#ff7043'];
-
-let hourlyChart, dailyChart;
-
-// Build stacked datasets keyed by category+direction. Returns {labels, datasets, total}.
-function buildStacked(rows) {
-  const labels = [...new Set(rows.map(r => r.label))].sort();
-  const series = {};
-  let total = 0;
-  rows.forEach(r => {
-    const cname = CLASS_NAMES[r.class_id] || ('Class ' + r.class_id);
-    const key = r.direction === 'in' ? (cname + ' →in') : (cname + ' out→');
-    if (!series[key]) series[key] = new Array(labels.length).fill(0);
-    const idx = labels.indexOf(r.label);
-    if (idx >= 0) series[key][idx] += r.count;
-    total += r.count;
-  });
-  const datasets = Object.entries(series).map(([label, data], i) => {
-    const color = SERIES_PALETTE[label] || FALLBACK[i % FALLBACK.length];
-    return {
-      label, data,
-      backgroundColor: color + 'cc',
-      borderColor: color,
-      borderWidth: 1,
-      borderRadius: 3,
-    };
-  });
-  return { labels, datasets, total };
-}
-
-// Sum totals per label across all series (for stat cards).
-function perLabelTotals(rows) {
+// Aggregate rows: {label→{class_id→count}}
+function aggregate(rows) {
   const m = {};
-  rows.forEach(r => { m[r.label] = (m[r.label] || 0) + r.count; });
+  rows.forEach(r => {
+    if (!m[r.label]) m[r.label] = {};
+    m[r.label][r.class_id] = (m[r.label][r.class_id] || 0) + r.count;
+  });
   return m;
 }
 
-function makeStacked(ctx, labels, datasets) {
-  return new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets },
-    options: { ...CHART_DEFAULTS }
+// Which class IDs actually appear in data?
+function activeClasses(agg) {
+  const seen = new Set();
+  Object.values(agg).forEach(h => Object.keys(h).forEach(id => seen.add(Number(id))));
+  return CLASS_IDS.filter(id => seen.has(id));
+}
+
+// Simple heat colour: 0 → transparent, max → full colour
+function heatStyle(val, max, hexColor) {
+  if (!val || !max) return '';
+  const alpha = 0.15 + 0.65 * (val / max);
+  const r = parseInt(hexColor.slice(1,3),16);
+  const g = parseInt(hexColor.slice(3,5),16);
+  const b = parseInt(hexColor.slice(5,7),16);
+  return `background:rgba(${r},${g},${b},${alpha.toFixed(2)});color:#fff;`;
+}
+
+function buildHourlyGrid(rows) {
+  const agg = aggregate(rows);
+  const hours = Object.keys(agg).sort();
+  const classes = activeClasses(agg);
+  if (!hours.length) return '<p style="color:#555;padding:20px 0">No data yet</p>';
+
+  // Find max per class for heat scaling
+  const maxPerClass = {};
+  classes.forEach(id => {
+    maxPerClass[id] = Math.max(...hours.map(h => agg[h][id] || 0));
   });
+
+  let html = '<table class="hgrid"><thead><tr><th></th>';
+  hours.forEach(h => { html += `<th>${h}</th>`; });
+  html += '<th style="color:#aaa">Total</th></tr></thead><tbody>';
+
+  classes.forEach(id => {
+    const info = CLASS_MAP[id] || { label: 'Class ' + id, color: '#888' };
+    const rowTotal = hours.reduce((s, h) => s + (agg[h][id] || 0), 0);
+    html += `<tr><td class="type-label">${info.label}</td>`;
+    hours.forEach(h => {
+      const v = agg[h][id] || 0;
+      const style = v ? heatStyle(v, maxPerClass[id], info.color) : '';
+      html += `<td class="heat" style="${style}">${v || '·'}</td>`;
+    });
+    html += `<td style="color:#aaa">${rowTotal}</td></tr>`;
+  });
+
+  // Total row
+  html += '<tr class="total-row"><td class="type-label">Total</td>';
+  let grandTotal = 0;
+  hours.forEach(h => {
+    const colTotal = classes.reduce((s, id) => s + (agg[h][id] || 0), 0);
+    grandTotal += colTotal;
+    html += `<td>${colTotal || '·'}</td>`;
+  });
+  html += `<td>${grandTotal}</td></tr>`;
+  html += '</tbody></table>';
+  return html;
+}
+
+function buildDailyTable(rows) {
+  const agg = aggregate(rows);
+  const days = Object.keys(agg).sort().reverse(); // newest first
+  const classes = activeClasses(agg);
+  if (!days.length) return '<p style="color:#555;padding:20px 0">No data yet</p>';
+
+  let html = '<table class="dtable"><thead><tr><th>Date</th>';
+  classes.forEach(id => {
+    const info = CLASS_MAP[id] || { label: 'Class ' + id };
+    html += `<th>${info.label}</th>`;
+  });
+  html += '<th>Total</th><th>🚲 Bike %</th></tr></thead><tbody>';
+
+  days.forEach(day => {
+    const rowTotal = classes.reduce((s, id) => s + (agg[day][id] || 0), 0);
+    const bikes = agg[day][1] || 0;
+    const pct = rowTotal ? ((bikes / rowTotal) * 100).toFixed(1) + '%' : '—';
+    html += `<tr><td>${day}</td>`;
+    classes.forEach(id => {
+      html += `<td>${agg[day][id] || 0}</td>`;
+    });
+    html += `<td>${rowTotal}</td><td class="bike-pct-cell">${pct}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
 }
 
 async function fetchAndRender() {
   try {
     const [hRes, dRes] = await Promise.all([
       fetch('/api/hourly'),
-      fetch('/api/daily')
+      fetch('/api/daily'),
     ]);
     const hourly = await hRes.json();
     const daily  = await dRes.json();
 
-    // Hourly chart (stacked per category+direction)
-    const h = buildStacked(hourly);
-    if (hourlyChart) {
-      hourlyChart.data.labels = h.labels;
-      hourlyChart.data.datasets = h.datasets;
-      hourlyChart.update();
-    } else {
-      hourlyChart = makeStacked(
-        document.getElementById('hourlyChart').getContext('2d'),
-        h.labels, h.datasets
-      );
-    }
+    document.getElementById('hourly-grid').innerHTML = buildHourlyGrid(hourly);
+    document.getElementById('daily-table').innerHTML = buildDailyTable(daily);
 
-    // Daily chart (stacked per category+direction)
-    const d = buildStacked(daily);
-    if (dailyChart) {
-      dailyChart.data.labels = d.labels;
-      dailyChart.data.datasets = d.datasets;
-      dailyChart.update();
-    } else {
-      dailyChart = makeStacked(
-        document.getElementById('dailyChart').getContext('2d'),
-        d.labels, d.datasets
-      );
-    }
+    // Stat cards — today = last date in daily
+    const todayAgg = aggregate(daily);
+    const todayKey = Object.keys(todayAgg).sort().pop();
+    const todayCounts = todayAgg[todayKey] || {};
+    const todayBikes = todayCounts[1] || 0;
+    const todayTotal = Object.values(todayCounts).reduce((a,b)=>a+b, 0);
+    const todayPct   = todayTotal ? ((todayBikes/todayTotal)*100).toFixed(1)+'%' : '—';
 
-    // Stats — computed from the summed daily series
-    const dayTotals = perLabelTotals(daily);
-    const dayKeys = Object.keys(dayTotals).sort();
-    const dayValues = dayKeys.map(k => dayTotals[k]);
-    const today = dayValues.length ? dayValues[dayValues.length - 1] : 0;
-    const week  = dayValues.slice(-7).reduce((a, b) => a + b, 0);
-    const total = dayValues.reduce((a, b) => a + b, 0);
-    document.getElementById('stat-today').textContent = today.toLocaleString();
-    document.getElementById('stat-week').textContent  = week.toLocaleString();
-    document.getElementById('stat-total').textContent = total.toLocaleString();
+    // Week bikes
+    const sortedDays = Object.keys(todayAgg).sort();
+    const weekDays = sortedDays.slice(-7);
+    const weekBikes = weekDays.reduce((s, d) => s + (todayAgg[d][1] || 0), 0);
+
+    document.getElementById('stat-bikes-today').textContent = todayBikes.toLocaleString();
+    document.getElementById('stat-bike-pct').textContent    = todayPct;
+    document.getElementById('stat-total-today').textContent = todayTotal.toLocaleString();
+    document.getElementById('stat-bikes-week').textContent  = weekBikes.toLocaleString();
 
   } catch(e) {
     console.error('Fetch error', e);
@@ -360,7 +379,7 @@ async function fetchAndRender() {
 }
 
 fetchAndRender();
-setInterval(fetchAndRender, 5 * 60 * 1000); // re-fetch every 5 min
+setInterval(fetchAndRender, 5 * 60 * 1000);
 </script>
 </body>
 </html>
