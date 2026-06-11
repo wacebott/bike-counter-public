@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS review_queue (
     decided_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_review_status ON review_queue (status);
+
+CREATE TABLE IF NOT EXISTS recipients (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    phone TEXT,
+    position INT
+);
+CREATE INDEX IF NOT EXISTS idx_recipients_position ON recipients (position);
 """
 
 INIT_SQL_SQLITE = """
@@ -77,6 +85,17 @@ CREATE TABLE IF NOT EXISTS sundowner_recipients (
     name TEXT NOT NULL DEFAULT '',
     number TEXT NOT NULL
 );
+"""
+
+INIT_SQL_SQLITE = INIT_SQL_SQLITE.rstrip() + """
+
+CREATE TABLE IF NOT EXISTS recipients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    phone TEXT,
+    position INT
+);
+CREATE INDEX IF NOT EXISTS idx_recipients_position ON recipients (position);
 """
 
 CLASS_LABELS = {1: "🚲 Bicycle", 2: "🚗 Car", 3: "🛵 Moped", 5: "🚌 Bus", 7: "🚛 Truck", 100: "🛴 Scooter"}
@@ -277,17 +296,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script>
 const CLASS_INFO = [
   { id: 1,   label: '🚲 Bicycle', color: '#4caf50' },
-  { id: 2,   label: '🚗 Vehicle', color: '#2196f3' },
+  { id: 99,  label: '🚗 Vehicle', color: '#2196f3' },
 ];
 const CLASS_IDS = CLASS_INFO.map(c => c.id);
 const CLASS_MAP = Object.fromEntries(CLASS_INFO.map(c => [c.id, c]));
 
-// Aggregate rows: {label→{class_id→count}} — collapse non-bike into class 2 (Vehicle)
+// Aggregate rows: {label→{class_id→count}} — API already consolidates to 1=Bicycle, 99=Vehicle
 function aggregate(rows) {
   const m = {};
   rows.forEach(r => {
     if (!m[r.label]) m[r.label] = {};
-    const cid = r.class_id === 1 ? 1 : 2;
+    const cid = r.class_id === 1 ? 1 : 99;
     m[r.label][cid] = (m[r.label][cid] || 0) + r.count;
   });
   return m;
@@ -474,12 +493,25 @@ def api_hourly():
         rows = cur.fetchall()
         cur.close()
         conn.close()
-        return jsonify([
-            {"label": r[0], "direction": r[1], "class_id": r[2], "count": r[3]}
-            for r in rows
-        ])
+        return jsonify(_consolidate_rows(rows))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+def _consolidate_rows(rows):
+    """Merge raw DB rows into Bicycle (class_id=1) + Vehicle (class_id=99).
+    Each row is (label, direction, class_id, count).
+    Returns list of dicts with keys: label, direction, class_id, count.
+    """
+    merged = {}  # (label, direction, consolidated_class_id) → count
+    for label, direction, class_id, cnt in rows:
+        cid = 1 if class_id == 1 else 99
+        key = (label, direction, cid)
+        merged[key] = merged.get(key, 0) + cnt
+    return [
+        {"label": lbl, "direction": d, "class_id": cid, "count": c}
+        for (lbl, d, cid), c in sorted(merged.items())
+    ]
 
 
 @app.route("/api/daily")
@@ -515,10 +547,7 @@ def api_daily():
         rows = cur.fetchall()
         cur.close()
         conn.close()
-        return jsonify([
-            {"label": r[0], "direction": r[1], "class_id": r[2], "count": r[3]}
-            for r in rows
-        ])
+        return jsonify(_consolidate_rows(rows))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -890,39 +919,44 @@ def api_review_decisions():
         return jsonify({"error": str(exc)}), 500
 
 
-# ── Sundowner recipients API ──────────────────────────────────────────────────
+# ── Recipients API (sundowner SMS list, Tailscale-trusted, no auth) ───────────
 
 @app.route("/api/recipients", methods=["GET"])
 def api_recipients_get():
+    """Return recipients ordered by position. No auth — Tailscale-trusted only."""
     try:
         conn = get_conn(); cur = conn.cursor()
-        cur.execute("SELECT name, number FROM sundowner_recipients ORDER BY id")
+        cur.execute("SELECT name, phone, position FROM recipients ORDER BY position")
         rows = cur.fetchall(); cur.close(); conn.close()
-        return jsonify([{"name": r[0], "number": r[1]} for r in rows])
+        return jsonify([{"name": r[0], "phone": r[1], "position": r[2]} for r in rows])
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/recipients", methods=["POST"])
 def api_recipients_post():
-    if not check_push_key():
-        return jsonify({"error": "Unauthorized"}), 401
-    data = request.get_json(force=True, silent=True) or {}
-    recipients = [r for r in data.get("recipients", []) if r.get("number", "").strip()]
+    """Replace all recipients. Accepts [{name, phone, position}]. No auth — Tailscale-trusted."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, list):
+        return jsonify({"error": "Expected a JSON array"}), 400
     try:
         conn = get_conn(); cur = conn.cursor()
         if USE_POSTGRES:
-            cur.execute("DELETE FROM sundowner_recipients")
-            for r in recipients:
-                cur.execute("INSERT INTO sundowner_recipients (name, number) VALUES (%s, %s)",
-                            (r.get("name", ""), r["number"].strip()))
+            cur.execute("DELETE FROM recipients")
+            for r in data:
+                cur.execute(
+                    "INSERT INTO recipients (name, phone, position) VALUES (%s, %s, %s)",
+                    (r.get("name", ""), r.get("phone", ""), int(r.get("position", 0)))
+                )
         else:
-            cur.execute("DELETE FROM sundowner_recipients")
-            for r in recipients:
-                cur.execute("INSERT INTO sundowner_recipients (name, number) VALUES (?, ?)",
-                            (r.get("name", ""), r["number"].strip()))
+            cur.execute("DELETE FROM recipients")
+            for r in data:
+                cur.execute(
+                    "INSERT INTO recipients (name, phone, position) VALUES (?, ?, ?)",
+                    (r.get("name", ""), r.get("phone", ""), int(r.get("position", 0)))
+                )
         conn.commit(); cur.close(); conn.close()
-        return jsonify({"status": "ok", "count": len(recipients)})
+        return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
