@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS review_queue (
     decided_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_review_status ON review_queue (status);
+
+CREATE TABLE IF NOT EXISTS sundowner_recipients (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    number TEXT NOT NULL
+);
+"""
+
+INIT_SQL_SQLITE = INIT_SQL_SQLITE.rstrip() + """
+
+CREATE TABLE IF NOT EXISTS sundowner_recipients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    number TEXT NOT NULL
+);
 """
 
 CLASS_LABELS = {1: "🚲 Bicycle", 2: "🚗 Car", 3: "🛵 Moped", 5: "🚌 Bus", 7: "🚛 Truck", 100: "🛴 Scooter"}
@@ -262,21 +277,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script>
 const CLASS_INFO = [
   { id: 1,   label: '🚲 Bicycle', color: '#4caf50' },
-  { id: 2,   label: '🚗 Car',     color: '#2196f3' },
-  { id: 3,   label: '🛵 Moped',   color: '#00bcd4' },
-  { id: 5,   label: '🚌 Bus',     color: '#ff9800' },
-  { id: 7,   label: '🚛 Truck',   color: '#f44336' },
-  { id: 100, label: '🛴 Scooter', color: '#9c27b0' },
+  { id: 2,   label: '🚗 Vehicle', color: '#2196f3' },
 ];
 const CLASS_IDS = CLASS_INFO.map(c => c.id);
 const CLASS_MAP = Object.fromEntries(CLASS_INFO.map(c => [c.id, c]));
 
-// Aggregate rows: {label→{class_id→count}}
+// Aggregate rows: {label→{class_id→count}} — collapse non-bike into class 2 (Vehicle)
 function aggregate(rows) {
   const m = {};
   rows.forEach(r => {
     if (!m[r.label]) m[r.label] = {};
-    m[r.label][r.class_id] = (m[r.label][r.class_id] || 0) + r.count;
+    const cid = r.class_id === 1 ? 1 : 2;
+    m[r.label][cid] = (m[r.label][cid] || 0) + r.count;
   });
   return m;
 }
@@ -874,6 +886,43 @@ def api_review_decisions():
         )
         rows = cur.fetchall(); cur.close(); conn.close()
         return jsonify([{"local_id": r[0], "status": r[1], "decided_at": r[2]} for r in rows])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ── Sundowner recipients API ──────────────────────────────────────────────────
+
+@app.route("/api/recipients", methods=["GET"])
+def api_recipients_get():
+    try:
+        conn = get_conn(); cur = conn.cursor()
+        cur.execute("SELECT name, number FROM sundowner_recipients ORDER BY id")
+        rows = cur.fetchall(); cur.close(); conn.close()
+        return jsonify([{"name": r[0], "number": r[1]} for r in rows])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/recipients", methods=["POST"])
+def api_recipients_post():
+    if not check_push_key():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True, silent=True) or {}
+    recipients = [r for r in data.get("recipients", []) if r.get("number", "").strip()]
+    try:
+        conn = get_conn(); cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("DELETE FROM sundowner_recipients")
+            for r in recipients:
+                cur.execute("INSERT INTO sundowner_recipients (name, number) VALUES (%s, %s)",
+                            (r.get("name", ""), r["number"].strip()))
+        else:
+            cur.execute("DELETE FROM sundowner_recipients")
+            for r in recipients:
+                cur.execute("INSERT INTO sundowner_recipients (name, number) VALUES (?, ?)",
+                            (r.get("name", ""), r["number"].strip()))
+        conn.commit(); cur.close(); conn.close()
+        return jsonify({"status": "ok", "count": len(recipients)})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
