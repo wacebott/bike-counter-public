@@ -1352,7 +1352,6 @@ function buildDateChecks(days) {
     lbl.appendChild(dot);
     lbl.appendChild(inp);
     lbl.appendChild(document.createTextNode(d));
-    lbl.addEventListener('click', e => { if (e.target !== inp) { inp.checked = !inp.checked; inp.dispatchEvent(new Event('change')); } });
     wrap.appendChild(lbl);
   });
 }
