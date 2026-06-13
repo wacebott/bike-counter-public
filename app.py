@@ -1167,8 +1167,8 @@ function renderDailyChart(agg) {
     data: {
       labels: days,
       datasets: [
-        { label: '🚲 Bicycle', data: bikes,    backgroundColor: BIKE_COLOR + 'cc', borderRadius: 3 },
-        { label: '🚗 Vehicle', data: vehicles, backgroundColor: VEHICLE_COLOR + 'cc', borderRadius: 3 },
+        { label: '🚲 Bicycle', data: bikes,    backgroundColor: BIKE_COLOR + 'cc',    borderRadius: 3, yAxisID: 'yBike' },
+        { label: '🚗 Vehicle', data: vehicles, backgroundColor: VEHICLE_COLOR + 'cc', borderRadius: 3, yAxisID: 'yVeh' },
       ]
     },
     options: {
@@ -1176,7 +1176,18 @@ function renderDailyChart(agg) {
       plugins: { legend: { labels: { color: '#aaa' } } },
       scales: {
         x: { ticks: { color: '#888' }, grid: { color: '#222' } },
-        y: { ticks: { color: '#888' }, grid: { color: '#222' } },
+        yBike: {
+          type: 'linear', position: 'right', beginAtZero: true,
+          ticks: { color: BIKE_COLOR },
+          grid: { color: '#222' },
+          title: { display: true, text: '🚲 Bicycles', color: BIKE_COLOR, font: { size: 11 } },
+        },
+        yVeh: {
+          type: 'linear', position: 'left', beginAtZero: true,
+          ticks: { color: VEHICLE_COLOR },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: '🚗 Vehicles', color: VEHICLE_COLOR, font: { size: 11 } },
+        },
       }
     }
   });
@@ -1252,16 +1263,16 @@ function renderHourlyChart(dateA, aggA, dateB, aggB) {
   const vehiclesA = HOURS.map(h => (aggA[h] && aggA[h][99]) || 0);
 
   const datasets = [
-    { label: `🚲 Bike — ${dateA}`,    data: bikesA,    borderColor: BIKE_COLOR,    backgroundColor: BIKE_COLOR+'33',    fill: true, tension: 0.3 },
-    { label: `🚗 Vehicle — ${dateA}`, data: vehiclesA, borderColor: VEHICLE_COLOR, backgroundColor: VEHICLE_COLOR+'33', fill: true, tension: 0.3 },
+    { label: `🚲 Bike — ${dateA}`,    data: bikesA,    borderColor: BIKE_COLOR,    backgroundColor: BIKE_COLOR+'33',    fill: true, tension: 0.3, yAxisID: 'yBike' },
+    { label: `🚗 Vehicle — ${dateA}`, data: vehiclesA, borderColor: VEHICLE_COLOR, backgroundColor: VEHICLE_COLOR+'33', fill: true, tension: 0.3, yAxisID: 'yVeh' },
   ];
 
   if (aggB && dateB) {
     const bikesB    = HOURS.map(h => (aggB[h] && aggB[h][1])  || 0);
     const vehiclesB = HOURS.map(h => (aggB[h] && aggB[h][99]) || 0);
     datasets.push(
-      { label: `🚲 Bike — ${dateB}`,    data: bikesB,    borderColor: '#a5d6a7', backgroundColor: '#a5d6a733', fill: false, tension: 0.3, borderDash: [5,3] },
-      { label: `🚗 Vehicle — ${dateB}`, data: vehiclesB, borderColor: '#90caf9', backgroundColor: '#90caf933', fill: false, tension: 0.3, borderDash: [5,3] },
+      { label: `🚲 Bike — ${dateB}`,    data: bikesB,    borderColor: '#a5d6a7', backgroundColor: '#a5d6a733', fill: false, tension: 0.3, borderDash: [5,3], yAxisID: 'yBike' },
+      { label: `🚗 Vehicle — ${dateB}`, data: vehiclesB, borderColor: '#90caf9', backgroundColor: '#90caf933', fill: false, tension: 0.3, borderDash: [5,3], yAxisID: 'yVeh' },
     );
   }
 
@@ -1275,7 +1286,18 @@ function renderHourlyChart(dateA, aggA, dateB, aggB) {
       plugins: { legend: { labels: { color: '#aaa' } } },
       scales: {
         x: { ticks: { color: '#888' }, grid: { color: '#222' } },
-        y: { ticks: { color: '#888' }, grid: { color: '#222' }, beginAtZero: true },
+        yBike: {
+          type: 'linear', position: 'right', beginAtZero: true,
+          ticks: { color: BIKE_COLOR },
+          grid: { color: '#222' },
+          title: { display: true, text: '🚲 Bicycles', color: BIKE_COLOR, font: { size: 11 } },
+        },
+        yVeh: {
+          type: 'linear', position: 'left', beginAtZero: true,
+          ticks: { color: VEHICLE_COLOR },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: '🚗 Vehicles', color: VEHICLE_COLOR, font: { size: 11 } },
+        },
       }
     }
   });
