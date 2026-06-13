@@ -1307,10 +1307,10 @@ function renderHeatmap() {
     const rowSum = HOURS.reduce((s,h) => s + cellVal(date,h), 0);
     const dow = new Date(date + 'T12:00:00').getDay(); // 0=Sun, 6=Sat
     const isWeekend = dow === 0 || dow === 6;
-    const rowStyle = isWeekend ? 'background:#1a1a2e;' : '';
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayTag = ` <span style="font-size:0.7rem;color:#ce93d8;opacity:0.9">${DAYS[dow]}</span>`;
     const labelStyle = isWeekend ? 'color:#ce93d8;font-weight:600;' : '';
-    const weekendTag = isWeekend ? ' <span style="font-size:0.65rem;color:#ce93d8;opacity:0.8">WE</span>' : '';
-    html += `<tr style="${rowStyle}"><td class="row-label" style="${labelStyle}">${date}${weekendTag}</td>`;
+    html += `<tr><td class="row-label" style="${labelStyle}">${date}${dayTag}</td>`;
     HOURS.forEach(h => {
       const v = cellVal(date, h);
       const style = v ? heatStyle(v, globalMax, color) : '';
