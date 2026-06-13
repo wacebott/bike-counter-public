@@ -1022,16 +1022,55 @@ STATS_HTML = """<!DOCTYPE html>
     td.bike-pct-cell { color: #81c784; font-weight: 600; }
     td.date-cell { color: #4fc3f7; }
 
-    /* hourly drill-down */
-    .drill-header {
-      display: flex; align-items: center; gap: 16px;
-      flex-wrap: wrap; margin-bottom: 16px;
+    /* filter buttons */
+    .filter-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
     }
-    .drill-header label { font-size: 0.82rem; color: #888; }
-    select.date-pick {
-      background: #2a2a2a; color: #e0e0e0; border: 1px solid #444;
-      border-radius: 6px; padding: 5px 10px; font-size: 0.85rem; cursor: pointer;
+    .filter-row label { font-size: 0.82rem; color: #888; margin-right: 4px; }
+    .filter-btn {
+      background: #2a2a2a; border: 1px solid #444; border-radius: 20px;
+      color: #aaa; font-size: 0.8rem; padding: 5px 14px; cursor: pointer;
+      transition: all 0.15s;
     }
+    .filter-btn.active { border-color: currentColor; color: #fff; }
+    .filter-btn.bike.active  { background: #1b3a1f; border-color: #4caf50; color: #4caf50; }
+    .filter-btn.veh.active   { background: #0d1f3c; border-color: #2196f3; color: #2196f3; }
+    .filter-btn.both.active  { background: #2a2a2a; border-color: #aaa;    color: #eee; }
+    .filter-btn.avg.active   { background: #3a2a1a; border-color: #ff9800; color: #ff9800; }
+    /* date checkboxes */
+    .date-checks {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; max-height: 110px;
+      overflow-y: auto; padding: 4px 0;
+    }
+    .date-check-label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.78rem; background: #2a2a2a; border: 1px solid #444;
+      border-radius: 16px; padding: 3px 10px; cursor: pointer; user-select: none;
+      transition: border-color 0.15s;
+    }
+    .date-check-label input { display: none; }
+    .date-check-label.checked { border-color: #4fc3f7; color: #4fc3f7; background: #0d2030; }
+    .date-check-label .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .bulk-btns { display: flex; gap: 8px; margin-bottom: 10px; }
+    .bulk-btn {
+      background: none; border: 1px solid #444; border-radius: 14px;
+      color: #888; font-size: 0.75rem; padding: 3px 10px; cursor: pointer;
+    }
+    .bulk-btn:hover { border-color: #888; color: #ccc; }
+    /* heatmap */
+    table.hmap {
+      border-collapse: collapse; width: 100%; font-size: 0.73rem; white-space: nowrap;
+    }
+    table.hmap th, table.hmap td {
+      padding: 4px 5px; text-align: center; border-bottom: 1px solid #1a1a1a;
+    }
+    table.hmap th { color: #666; font-weight: 400; }
+    table.hmap td.row-label {
+      text-align: left; color: #aaa; padding-right: 10px; font-size: 0.72rem;
+    }
+    td.hcell { border-radius: 3px; min-width: 28px; }
     .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
     .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
     .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
@@ -1063,10 +1102,16 @@ STATS_HTML = """<!DOCTYPE html>
     body.light table.dtable th, body.light table.dtable td,
     body.light table.hgrid th, body.light table.hgrid td { border-bottom-color: #e0e0e0; }
     body.light table.hgrid tr.total-row td { border-top-color: #ccc; }
-    body.light select.date-pick { background: #fff; color: #111; border-color: #ccc; }
     body.light #theme-btn { background: #ddd; color: #333; }
     body.light .section-title { color: #666; }
-    body.light .drill-header label { color: #555; }
+    body.light .filter-row label { color: #555; }
+    body.light .filter-btn { background: #f0f0f0; border-color: #ccc; color: #555; }
+    body.light .date-check-label { background: #f0f0f0; border-color: #ccc; color: #444; }
+    body.light .date-check-label.checked { background: #e3f2fd; border-color: #2196f3; color: #1565c0; }
+    body.light .bulk-btn { border-color: #ccc; color: #666; }
+    body.light table.hmap th { color: #888; }
+    body.light table.hmap td.row-label { color: #555; }
+    body.light table.hmap { border-color: #eee; }
   </style>
 </head>
 <body>
@@ -1098,27 +1143,35 @@ STATS_HTML = """<!DOCTYPE html>
   <div id="daily-table-wrap" style="overflow-x:auto">Loading…</div>
 </div>
 
-<!-- Section 3: Hourly drill-down -->
+<!-- Section 3: Heatmap -->
+<div class="card">
+  <p class="section-title">Hourly heatmap — all dates × all hours</p>
+  <div class="filter-row">
+    <label>Show:</label>
+    <button class="filter-btn both active" id="hm-both" onclick="setHmFilter('both')">Both</button>
+    <button class="filter-btn bike" id="hm-bike" onclick="setHmFilter('bike')">🚲 Bicycles only</button>
+    <button class="filter-btn veh"  id="hm-veh"  onclick="setHmFilter('veh')">🚗 Vehicles only</button>
+  </div>
+  <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
+</div>
+
+<!-- Section 4: Multi-date line chart -->
 <div class="card" id="hourly-card">
-  <div class="drill-header">
-    <p class="section-title" style="margin:0">Hourly breakdown</p>
-    <div>
-      <label>Date A: </label>
-      <select class="date-pick" id="date-a" onchange="loadHourly()"></select>
-    </div>
-    <div>
-      <label>Compare to: </label>
-      <select class="date-pick" id="date-b" onchange="loadHourly()">
-        <option value="">— none —</option>
-      </select>
-    </div>
+  <p class="section-title">Hourly trends — compare dates</p>
+  <div class="filter-row">
+    <label>Show:</label>
+    <button class="filter-btn both active" id="lc-both" onclick="setLcFilter('both')">Both</button>
+    <button class="filter-btn bike" id="lc-bike" onclick="setLcFilter('bike')">🚲 Bicycles only</button>
+    <button class="filter-btn veh"  id="lc-veh"  onclick="setLcFilter('veh')">🚗 Vehicles only</button>
+    <button class="filter-btn avg"  id="lc-avg"  onclick="toggleAvg()">📈 Show average</button>
   </div>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div>🚲 Bicycle</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div>🚗 Vehicle</div>
+  <div class="bulk-btns">
+    <button class="bulk-btn" onclick="selectAllDates()">Select all</button>
+    <button class="bulk-btn" onclick="clearAllDates()">Clear all</button>
+    <button class="bulk-btn" onclick="selectRecentDates(7)">Last 7 days</button>
   </div>
-  <div class="chart-wrap"><canvas id="hourly-chart"></canvas></div>
-  <div id="hourly-grid-wrap" style="overflow-x:auto;margin-top:16px"></div>
+  <div class="date-checks" id="date-checks"></div>
+  <div class="chart-wrap" style="height:320px"><canvas id="hourly-chart"></canvas></div>
 </div>
 
 <footer style="text-align:center;margin-top:40px;color:#555;font-size:0.8rem">
@@ -1132,7 +1185,15 @@ const HOURS = Array.from({length:24}, (_,i) => String(i).padStart(2,'0')+':00');
 
 let dailyChart  = null;
 let hourlyChart = null;
-let allDailyData = [];
+let allDailyData   = {};   // date → {1: count, 99: count}
+let allHourlyData  = {};   // date → hour → {1: count, 99: count}
+let hmFilter = 'both';     // heatmap filter
+let lcFilter = 'both';     // line chart filter
+let showAvg  = false;
+
+// palette for multi-date lines (bike / vehicle per date)
+const PALETTE_BIKE = ['#4caf50','#80cbc4','#aed581','#26c6da','#9ccc65','#00bcd4','#c5e1a5','#b2dfdb'];
+const PALETTE_VEH  = ['#2196f3','#7c4dff','#ff5722','#607d8b','#e91e63','#009688','#ff9800','#795548'];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function aggregate(rows) {
@@ -1216,65 +1277,189 @@ function renderDailyTable(agg) {
   document.getElementById('daily-table-wrap').innerHTML = html;
 }
 
-// ── date selectors ────────────────────────────────────────────────────────────
-function populateDatePickers(agg) {
-  const days = Object.keys(agg).sort().reverse();
-  const selA = document.getElementById('date-a');
-  const selB = document.getElementById('date-b');
-  selA.innerHTML = '';
-  // keep "none" first option in B
-  selB.innerHTML = '<option value="">— none —</option>';
+// ── heatmap filter ────────────────────────────────────────────────────────────
+function setHmFilter(f) {
+  hmFilter = f;
+  ['both','bike','veh'].forEach(x => document.getElementById('hm-'+x).classList.toggle('active', x===f));
+  renderHeatmap();
+}
+
+// ── heatmap render ────────────────────────────────────────────────────────────
+function renderHeatmap() {
+  const days = Object.keys(allHourlyData).sort();
+  if (!days.length) { document.getElementById('heatmap-wrap').innerHTML = '<p style="color:#555;padding:20px">No data</p>'; return; }
+
+  // compute values per cell and global max
+  const cellVal = (date, hour) => {
+    const d = allHourlyData[date][hour] || {};
+    if (hmFilter === 'bike') return d[1]  || 0;
+    if (hmFilter === 'veh')  return d[99] || 0;
+    return (d[1] || 0) + (d[99] || 0);
+  };
+  const color = hmFilter === 'bike' ? BIKE_COLOR : hmFilter === 'veh' ? VEHICLE_COLOR : '#90a4ae';
+  const globalMax = Math.max(...days.flatMap(d => HOURS.map(h => cellVal(d, h))));
+
+  let html = '<table class="hmap"><thead><tr><th></th>';
+  HOURS.forEach(h => { html += `<th>${h.slice(0,2)}</th>`; });
+  html += '<th style="color:#555">Σ</th></tr></thead><tbody>';
+
+  days.slice().reverse().forEach(date => {
+    const rowSum = HOURS.reduce((s,h) => s + cellVal(date,h), 0);
+    html += `<tr><td class="row-label">${date}</td>`;
+    HOURS.forEach(h => {
+      const v = cellVal(date, h);
+      const style = v ? heatStyle(v, globalMax, color) : '';
+      const title = `${date} ${h}: ${v}`;
+      html += `<td class="hcell" style="${style}" title="${title}">${v || ''}</td>`;
+    });
+    html += `<td style="color:#666;font-size:0.7rem">${rowSum}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmap-wrap').innerHTML = html;
+}
+
+// ── line chart filters ────────────────────────────────────────────────────────
+function setLcFilter(f) {
+  lcFilter = f;
+  ['both','bike','veh'].forEach(x => document.getElementById('lc-'+x).classList.toggle('active', x===f));
+  renderLineChart();
+}
+
+function toggleAvg() {
+  showAvg = !showAvg;
+  document.getElementById('lc-avg').classList.toggle('active', showAvg);
+  renderLineChart();
+}
+
+// ── date checkboxes ───────────────────────────────────────────────────────────
+function buildDateChecks(days) {
+  const wrap = document.getElementById('date-checks');
+  wrap.innerHTML = '';
   days.forEach((d, i) => {
-    selA.innerHTML += `<option value="${d}" ${i===0?'selected':''}>${d}</option>`;
-    selB.innerHTML += `<option value="${d}">${d}</option>`;
+    const lbl = document.createElement('label');
+    lbl.className = 'date-check-label' + (i < 7 ? ' checked' : '');
+    lbl.dataset.date = d;
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = PALETTE_BIKE[i % PALETTE_BIKE.length];
+    const inp = document.createElement('input');
+    inp.type = 'checkbox';
+    inp.checked = i < 7;
+    inp.addEventListener('change', () => {
+      lbl.classList.toggle('checked', inp.checked);
+      renderLineChart();
+    });
+    lbl.appendChild(dot);
+    lbl.appendChild(inp);
+    lbl.appendChild(document.createTextNode(d));
+    lbl.addEventListener('click', e => { if (e.target !== inp) { inp.checked = !inp.checked; inp.dispatchEvent(new Event('change')); } });
+    wrap.appendChild(lbl);
   });
 }
 
-function selectDate(date) {
-  // highlight row
-  document.querySelectorAll('table.dtable tr.selected').forEach(r => r.classList.remove('selected'));
-  document.querySelectorAll('table.dtable tr.clickable').forEach(r => {
-    if (r.querySelector('td.date-cell')?.textContent === date) r.classList.add('selected');
+function getCheckedDates() {
+  return [...document.querySelectorAll('#date-checks .date-check-label.checked')].map(l => l.dataset.date);
+}
+
+function selectAllDates() {
+  document.querySelectorAll('#date-checks .date-check-label').forEach(l => {
+    l.classList.add('checked');
+    l.querySelector('input').checked = true;
   });
-  document.getElementById('date-a').value = date;
-  loadHourly();
-  document.getElementById('hourly-card').scrollIntoView({behavior:'smooth'});
+  renderLineChart();
 }
 
-// ── hourly chart + grid ───────────────────────────────────────────────────────
-async function loadHourly() {
-  const dateA = document.getElementById('date-a').value;
-  const dateB = document.getElementById('date-b').value;
-  if (!dateA) return;
-
-  const fetches = [fetch(`/api/hourly_by_date?date=${dateA}`).then(r=>r.json())];
-  if (dateB) fetches.push(fetch(`/api/hourly_by_date?date=${dateB}`).then(r=>r.json()));
-
-  const results = await Promise.all(fetches);
-  const aggA = aggregate(results[0]);
-  const aggB = dateB ? aggregate(results[1]) : null;
-
-  renderHourlyChart(dateA, aggA, dateB, aggB);
-  renderHourlyGrid(dateA, aggA);
+function clearAllDates() {
+  document.querySelectorAll('#date-checks .date-check-label').forEach(l => {
+    l.classList.remove('checked');
+    l.querySelector('input').checked = false;
+  });
+  renderLineChart();
 }
 
-function renderHourlyChart(dateA, aggA, dateB, aggB) {
-  const bikesA    = HOURS.map(h => (aggA[h] && aggA[h][1])  || 0);
-  const vehiclesA = HOURS.map(h => (aggA[h] && aggA[h][99]) || 0);
+function selectRecentDates(n) {
+  const labels = [...document.querySelectorAll('#date-checks .date-check-label')];
+  labels.forEach((l, i) => {
+    const on = i < n;
+    l.classList.toggle('checked', on);
+    l.querySelector('input').checked = on;
+  });
+  renderLineChart();
+}
 
-  const datasets = [
-    { label: `🚲 Bike — ${dateA}`,    data: bikesA,    borderColor: BIKE_COLOR,    backgroundColor: BIKE_COLOR+'33',    fill: true, tension: 0.3, yAxisID: 'yBike' },
-    { label: `🚗 Vehicle — ${dateA}`, data: vehiclesA, borderColor: VEHICLE_COLOR, backgroundColor: VEHICLE_COLOR+'33', fill: true, tension: 0.3, yAxisID: 'yVeh' },
-  ];
+// ── line chart render ─────────────────────────────────────────────────────────
+function renderLineChart() {
+  const selected = getCheckedDates();
+  const showBike = lcFilter !== 'veh';
+  const showVeh  = lcFilter !== 'bike';
+  const datasets = [];
+  const allDays  = Object.keys(allHourlyData).sort().reverse();
 
-  if (aggB && dateB) {
-    const bikesB    = HOURS.map(h => (aggB[h] && aggB[h][1])  || 0);
-    const vehiclesB = HOURS.map(h => (aggB[h] && aggB[h][99]) || 0);
-    datasets.push(
-      { label: `🚲 Bike — ${dateB}`,    data: bikesB,    borderColor: '#a5d6a7', backgroundColor: '#a5d6a733', fill: false, tension: 0.3, borderDash: [5,3], yAxisID: 'yBike' },
-      { label: `🚗 Vehicle — ${dateB}`, data: vehiclesB, borderColor: '#90caf9', backgroundColor: '#90caf933', fill: false, tension: 0.3, borderDash: [5,3], yAxisID: 'yVeh' },
-    );
+  selected.forEach((date, idx) => {
+    const agg = allHourlyData[date] || {};
+    const ci  = allDays.indexOf(date);
+    const bikeColor = PALETTE_BIKE[ci % PALETTE_BIKE.length];
+    const vehColor  = PALETTE_VEH[ci % PALETTE_VEH.length];
+    if (showBike) {
+      datasets.push({
+        label: `🚲 ${date}`,
+        data: HOURS.map(h => (agg[h]&&agg[h][1])||0),
+        borderColor: bikeColor, backgroundColor: bikeColor+'22',
+        fill: false, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'yBike',
+      });
+    }
+    if (showVeh) {
+      datasets.push({
+        label: `🚗 ${date}`,
+        data: HOURS.map(h => (agg[h]&&agg[h][99])||0),
+        borderColor: vehColor, backgroundColor: vehColor+'22',
+        fill: false, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'yVeh',
+      });
+    }
+  });
+
+  // Average line
+  if (showAvg && selected.length > 1) {
+    const n = selected.length;
+    if (showBike) {
+      datasets.push({
+        label: '📈 Avg Bike',
+        data: HOURS.map(h => {
+          const s = selected.reduce((sum, d) => sum + ((allHourlyData[d][h]&&allHourlyData[d][h][1])||0), 0);
+          return Math.round(s / n);
+        }),
+        borderColor: '#ff9800', backgroundColor: '#ff980022',
+        fill: false, tension: 0.4, borderWidth: 3, borderDash: [6,3],
+        pointRadius: 0, yAxisID: 'yBike',
+      });
+    }
+    if (showVeh) {
+      datasets.push({
+        label: '📈 Avg Vehicle',
+        data: HOURS.map(h => {
+          const s = selected.reduce((sum, d) => sum + ((allHourlyData[d][h]&&allHourlyData[d][h][99])||0), 0);
+          return Math.round(s / n);
+        }),
+        borderColor: '#ffcc02', backgroundColor: '#ffcc0222',
+        fill: false, tension: 0.4, borderWidth: 3, borderDash: [6,3],
+        pointRadius: 0, yAxisID: 'yVeh',
+      });
+    }
   }
+
+  const scales = {
+    x: { ticks: { color: '#888' }, grid: { color: '#222' } },
+  };
+  if (showBike) scales.yBike = {
+    type: 'linear', position: 'right', beginAtZero: true,
+    ticks: { color: BIKE_COLOR }, grid: { color: '#222' },
+    title: { display: true, text: '🚲 Bicycles', color: BIKE_COLOR, font: { size: 11 } },
+  };
+  if (showVeh) scales.yVeh = {
+    type: 'linear', position: 'left', beginAtZero: true,
+    ticks: { color: VEHICLE_COLOR }, grid: { drawOnChartArea: !showBike },
+    title: { display: true, text: '🚗 Vehicles', color: VEHICLE_COLOR, font: { size: 11 } },
+  };
 
   const ctx = document.getElementById('hourly-chart').getContext('2d');
   if (hourlyChart) hourlyChart.destroy();
@@ -1283,70 +1468,58 @@ function renderHourlyChart(dateA, aggA, dateB, aggB) {
     data: { labels: HOURS, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#aaa' } } },
-      scales: {
-        x: { ticks: { color: '#888' }, grid: { color: '#222' } },
-        yBike: {
-          type: 'linear', position: 'right', beginAtZero: true,
-          ticks: { color: BIKE_COLOR },
-          grid: { color: '#222' },
-          title: { display: true, text: '🚲 Bicycles', color: BIKE_COLOR, font: { size: 11 } },
-        },
-        yVeh: {
-          type: 'linear', position: 'left', beginAtZero: true,
-          ticks: { color: VEHICLE_COLOR },
-          grid: { drawOnChartArea: false },
-          title: { display: true, text: '🚗 Vehicles', color: VEHICLE_COLOR, font: { size: 11 } },
-        },
-      }
+      plugins: {
+        legend: { labels: { color: '#aaa', boxWidth: 12, font: { size: 11 } } }
+      },
+      scales,
+      interaction: { mode: 'index', intersect: false },
     }
   });
 }
 
-function renderHourlyGrid(date, agg) {
-  const maxBike = Math.max(...HOURS.map(h => (agg[h]&&agg[h][1])||0));
-  const maxVeh  = Math.max(...HOURS.map(h => (agg[h]&&agg[h][99])||0));
-  const maxMap  = {1: maxBike, 99: maxVeh};
-  const colorMap = {1: BIKE_COLOR, 99: VEHICLE_COLOR};
-  const labelMap = {1: '🚲 Bicycle', 99: '🚗 Vehicle'};
-
-  let html = `<table class="hgrid"><thead><tr><th></th>`;
-  HOURS.forEach(h => { html += `<th>${h}</th>`; });
-  html += `<th style="color:#aaa">Total</th></tr></thead><tbody>`;
-
-  [1, 99].forEach(cid => {
-    const rowTotal = HOURS.reduce((s,h) => s + ((agg[h]&&agg[h][cid])||0), 0);
-    html += `<tr><td class="type-label">${labelMap[cid]}</td>`;
-    HOURS.forEach(h => {
-      const v = (agg[h]&&agg[h][cid])||0;
-      const style = v ? heatStyle(v, maxMap[cid], colorMap[cid]) : '';
-      html += `<td class="heat" style="${style}">${v||'·'}</td>`;
-    });
-    html += `<td style="color:#aaa">${rowTotal}</td></tr>`;
+function selectDate(date) {
+  document.querySelectorAll('table.dtable tr.selected').forEach(r => r.classList.remove('selected'));
+  document.querySelectorAll('table.dtable tr.clickable').forEach(r => {
+    if (r.querySelector('td.date-cell')?.textContent === date) r.classList.add('selected');
   });
-
-  html += `<tr class="total-row"><td class="type-label">Total</td>`;
-  let grand = 0;
-  HOURS.forEach(h => {
-    const t = ((agg[h]&&agg[h][1])||0) + ((agg[h]&&agg[h][99])||0);
-    grand += t;
-    html += `<td>${t||'·'}</td>`;
+  // check only this date in the line chart
+  document.querySelectorAll('#date-checks .date-check-label').forEach(l => {
+    const on = l.dataset.date === date;
+    l.classList.toggle('checked', on);
+    l.querySelector('input').checked = on;
   });
-  html += `<td>${grand}</td></tr></tbody></table>`;
-  document.getElementById('hourly-grid-wrap').innerHTML = html;
+  renderLineChart();
+  document.getElementById('hourly-card').scrollIntoView({behavior:'smooth'});
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const res = await fetch('/api/daily');
-  const rows = await res.json();
-  const agg = aggregate(rows);
-  allDailyData = agg;
+  // Fetch daily summary + all hourly data in parallel
+  const [dailyRes, hourlyRes] = await Promise.all([
+    fetch('/api/daily').then(r=>r.json()),
+    fetch('/api/hourly_all_dates').then(r=>r.json()),
+  ]);
 
-  renderDailyChart(agg);
-  renderDailyTable(agg);
-  populateDatePickers(agg);
-  await loadHourly();
+  // Daily
+  const dailyAgg = aggregate(dailyRes);
+  allDailyData = dailyAgg;
+  renderDailyChart(dailyAgg);
+  renderDailyTable(dailyAgg);
+
+  // Hourly — build allHourlyData: date → hour → {1, 99}
+  hourlyRes.forEach(row => {
+    const date = row.date;
+    const hour = row.hour;
+    const cid  = row.class_id === 1 ? 1 : 99;
+    if (!allHourlyData[date]) allHourlyData[date] = {};
+    if (!allHourlyData[date][hour]) allHourlyData[date][hour] = {};
+    allHourlyData[date][hour][cid] = (allHourlyData[date][hour][cid] || 0) + row.count;
+  });
+
+  const days = Object.keys(allHourlyData).sort().reverse();
+  buildDateChecks(days);
+  renderHeatmap();
+  renderLineChart();
 }
 
 init();
@@ -1369,6 +1542,47 @@ if (localStorage.getItem('theme') === 'light') {
 @app.route("/stats")
 def stats():
     return render_template_string(STATS_HTML)
+
+
+@app.route("/api/hourly_all_dates")
+def api_hourly_all_dates():
+    """Return hourly counts for ALL dates, grouped by date + hour + class_id. Halifax time."""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("""
+                SELECT
+                    to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'YYYY-MM-DD') AS date,
+                    to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'HH24:00') AS hour,
+                    class_id,
+                    COUNT(*) AS cnt
+                FROM crossings
+                GROUP BY date, hour, class_id
+                ORDER BY date, hour
+            """)
+        else:
+            cur.execute("""
+                SELECT
+                    strftime('%Y-%m-%d', ts) AS date,
+                    strftime('%H:00', ts)    AS hour,
+                    class_id,
+                    COUNT(*) AS cnt
+                FROM crossings
+                GROUP BY date, hour, class_id
+                ORDER BY date, hour
+            """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        result = []
+        for row in rows:
+            date, hour, class_id, cnt = row
+            cid = 1 if class_id == 1 else 99
+            result.append({"date": date, "hour": hour, "class_id": cid, "count": cnt})
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/hourly_by_date")
