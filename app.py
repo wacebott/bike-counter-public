@@ -153,7 +153,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       padding: 24px 16px 48px;
       position: relative;
     }
-    header { text-align: center; margin-bottom: 28px; }
+    header { text-align: center; margin-bottom: 28px; padding-top: 48px; }
     header h1 { font-size: 1.8rem; font-weight: 700; }
     header p.subtitle { margin-top: 6px; color: #888; font-size: 0.85rem; }
 
@@ -1256,7 +1256,7 @@ STATS_HTML = """<!DOCTYPE html>
       min-height: 100vh; padding: 24px 16px 48px;
       position: relative;
     }
-    header { text-align: center; margin-bottom: 28px; }
+    header { text-align: center; margin-bottom: 28px; padding-top: 48px; }
     header h1 { font-size: 1.8rem; font-weight: 700; }
     header p.subtitle { margin-top: 6px; color: #888; font-size: 0.85rem; }
     a.back-link {
