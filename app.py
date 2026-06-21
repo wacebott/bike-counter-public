@@ -254,6 +254,40 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     body.light header p.subtitle { color: #666; }
     body.light .section-title { color: #666; }
 
+    /* ── Heatmap card ── */
+    .hmap-wrap {
+      max-width: 1300px; margin: 0 auto 32px;
+      background: #1e1e1e; border-radius: 12px;
+      padding: 20px 18px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    .filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .filter-row label { font-size: 0.82rem; color: #888; margin-right: 4px; }
+    .filter-btn {
+      background: #2a2a2a; border: 1px solid #444; border-radius: 20px;
+      color: #aaa; font-size: 0.8rem; padding: 5px 14px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn.active { border-color: currentColor; color: #fff; }
+    .filter-btn.both.active { background: #2a2a2a; border-color: #aaa; color: #eee; }
+    .filter-btn.bike.active { background: #1b3a1f; border-color: #4caf50; color: #4caf50; }
+    .filter-btn.veh.active  { background: #0d1f3c; border-color: #2196f3; color: #2196f3; }
+    .filter-btn.ped.active  { background: #2a1f0a; border-color: #ff9800; color: #ff9800; }
+    table.hmap {
+      border-collapse: collapse; width: 100%; font-size: 0.73rem; white-space: nowrap;
+    }
+    table.hmap th, table.hmap td {
+      padding: 4px 5px; text-align: center; border-bottom: 1px solid #1a1a1a;
+    }
+    table.hmap th { color: #666; font-weight: 400; }
+    table.hmap td.row-label {
+      text-align: left; color: #aaa; padding-right: 10px; font-size: 0.72rem;
+    }
+    td.hcell { border-radius: 3px; min-width: 28px; }
+    body.light .hmap-wrap { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    body.light table.hmap th { color: #888; }
+    body.light table.hmap td.row-label { color: #555; }
+
     #theme-btn {
       position: fixed; top: 60px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
@@ -299,6 +333,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="daily-wrap">
   <p class="section-title">Daily summary — last 30 days</p>
   <div id="daily-table">Loading…</div>
+</div>
+
+<div class="hmap-wrap">
+  <p class="section-title">Hourly heatmap — all dates × all hours</p>
+  <div class="filter-row">
+    <label>Show:</label>
+    <button class="filter-btn both active" id="hm-both" onclick="setHmFilter('both')">All</button>
+    <button class="filter-btn bike" id="hm-bike" onclick="setHmFilter('bike')">🚲 Bicycles only</button>
+    <button class="filter-btn veh"  id="hm-veh"  onclick="setHmFilter('veh')">🚗 Vehicles only</button>
+    <button class="filter-btn ped"  id="hm-ped"  onclick="setHmFilter('ped')">🚶 Pedestrian only</button>
+  </div>
+  <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
 </div>
 
 <footer>Data refreshes automatically &bull; Powered by YOLO detection</footer>
@@ -532,6 +578,86 @@ if (localStorage.getItem('theme') === 'light') {
   document.body.classList.add('light');
   document.getElementById('theme-btn').textContent = '🌙 Dark';
 }
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+const HM_HOURS = Array.from({length:24}, (_,i) => String(i).padStart(2,'0')+':00');
+const HM_BIKE_COLOR    = '#4caf50';
+const HM_VEHICLE_COLOR = '#2196f3';
+const HM_PED_COLOR     = '#ff9800';
+let hmFilter   = 'both';
+let hmData     = {};  // date → hour → {0, 1, 99}
+
+function heatStyle(v, max, color) {
+  if (!v || !max) return '';
+  const alpha = Math.round((v / max) * 200 + 30);
+  const hex = alpha.toString(16).padStart(2,'0');
+  return 'background:' + color + hex + ';color:#fff;font-weight:600;';
+}
+
+function setHmFilter(f) {
+  hmFilter = f;
+  ['both','bike','veh','ped'].forEach(x => document.getElementById('hm-'+x).classList.toggle('active', x===f));
+  renderHeatmap();
+}
+
+function renderHeatmap() {
+  const wrap = document.getElementById('heatmap-wrap');
+  const days = Object.keys(hmData).sort();
+  if (!days.length) { wrap.innerHTML = '<p style="color:#555;padding:20px">No data yet</p>'; return; }
+
+  const cellVal = (date, hour) => {
+    const d = (hmData[date] && hmData[date][hour]) || {};
+    if (hmFilter === 'bike') return d[1]  || 0;
+    if (hmFilter === 'veh')  return d[99] || 0;
+    if (hmFilter === 'ped')  return d[0]  || 0;
+    return (d[0] || 0) + (d[1] || 0) + (d[99] || 0);
+  };
+  const color = hmFilter === 'bike' ? HM_BIKE_COLOR
+              : hmFilter === 'veh'  ? HM_VEHICLE_COLOR
+              : hmFilter === 'ped'  ? HM_PED_COLOR
+              : '#90a4ae';
+  const globalMax = Math.max(...days.flatMap(d => HM_HOURS.map(h => cellVal(d, h))), 1);
+
+  let html = '<table class="hmap"><thead><tr><th></th>';
+  HM_HOURS.forEach(h => { html += '<th>' + h.slice(0,2) + '</th>'; });
+  html += '<th style="color:#555">Σ</th></tr></thead><tbody>';
+
+  days.slice().reverse().forEach(date => {
+    const rowSum = HM_HOURS.reduce((s,h) => s + cellVal(date,h), 0);
+    const dow = new Date(date + 'T12:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayTag = ' <span style="font-size:0.7rem;color:#ce93d8;opacity:0.9">' + DAYS[dow] + '</span>';
+    const labelStyle = isWeekend ? 'color:#ce93d8;font-weight:600;' : '';
+    html += '<tr><td class="row-label" style="' + labelStyle + '">' + date + dayTag + '</td>';
+    HM_HOURS.forEach(h => {
+      const v = cellVal(date, h);
+      const style = v ? heatStyle(v, globalMax, color) : '';
+      html += '<td class="hcell" style="' + style + '" title="' + date + ' ' + h + ': ' + v + '">' + (v || '') + '</td>';
+    });
+    html += '<td style="color:#666;font-size:0.7rem">' + rowSum + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function loadHeatmap() {
+  try {
+    const rows = await fetch('/api/hourly_all_dates').then(r => r.json());
+    hmData = {};
+    rows.forEach(row => {
+      const cid = row.class_id === 1 ? 1 : row.class_id === 0 ? 0 : 99;
+      if (!hmData[row.date]) hmData[row.date] = {};
+      if (!hmData[row.date][row.hour]) hmData[row.date][row.hour] = {};
+      hmData[row.date][row.hour][cid] = (hmData[row.date][row.hour][cid] || 0) + row.count;
+    });
+    renderHeatmap();
+  } catch(e) {
+    document.getElementById('heatmap-wrap').innerHTML = '<p style="color:#c33;padding:20px">Failed to load heatmap</p>';
+  }
+}
+
+loadHeatmap();
 </script>
 </body>
 </html>
