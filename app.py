@@ -209,6 +209,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     /* heat-map colouring applied via inline style */
     td.heat { border-radius: 4px; }
 
+    /* ── Vehicle expand/collapse ── */
+    tr.group-vehicle td.type-label { cursor: pointer; user-select: none; }
+    tr.group-vehicle td.type-label:hover { color: #fff; }
+    tr.group-vehicle .expand-icon { display: inline-block; margin-right: 5px; transition: transform 0.15s; font-style: normal; font-size: 0.65rem; vertical-align: middle; }
+    tr.group-vehicle.expanded .expand-icon { transform: rotate(90deg); }
+    tr.vehicle-sub { display: none; }
+    tr.vehicle-sub td { border-bottom-color: #1a1a1a !important; }
+    tr.vehicle-sub td.type-label { padding-left: 26px; font-weight: 400; color: #888; font-size: 0.78rem; }
+    tr.vehicle-sub.visible { display: table-row; }
+
     /* ── Daily summary table ── */
     .daily-wrap {
       max-width: 1300px; margin: 0 auto 32px;
@@ -282,7 +292,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="grid-wrap">
-  <p class="section-title">Hourly counts — last 24 hours</p>
+  <p class="section-title">Hourly counts</p>
   <div id="hourly-grid">Loading…</div>
 </div>
 
@@ -295,18 +305,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <script>
 const CLASS_INFO = [
-  { id: 1,   label: '🚲 Bicycle', color: '#4caf50' },
-  { id: 99,  label: '🚗 Vehicle', color: '#2196f3' },
+  { id: 1,   label: '🚲 Bicycle',    color: '#4caf50' },
+  { id: 99,  label: '🚗 Vehicle',    color: '#2196f3' },
+  { id: 0,   label: '🚶 Pedestrian', color: '#ff9800' },
 ];
 const CLASS_IDS = CLASS_INFO.map(c => c.id);
 const CLASS_MAP = Object.fromEntries(CLASS_INFO.map(c => [c.id, c]));
 
-// Aggregate rows: {label→{class_id→count}} — API already consolidates to 1=Bicycle, 99=Vehicle
+// Vehicle sub-class info for drill-down
+const VEHICLE_SUB = {
+  2:   { label: '🚗 Car',     color: '#2196f3' },
+  3:   { label: '🛵 Moped',   color: '#00bcd4' },
+  5:   { label: '🚌 Bus',     color: '#ff9800' },
+  7:   { label: '🚛 Truck',   color: '#f44336' },
+  100: { label: '🛴 Scooter', color: '#9c27b0' },
+};
+
+// Aggregate rows: {label→{class_id→count}} — API consolidates to 1=Bicycle, 0=Pedestrian, 99=Vehicle
 function aggregate(rows) {
   const m = {};
   rows.forEach(r => {
     if (!m[r.label]) m[r.label] = {};
-    const cid = r.class_id === 1 ? 1 : 99;
+    const cid = r.class_id === 1 ? 1 : r.class_id === 0 ? 0 : 99;
     m[r.label][cid] = (m[r.label][cid] || 0) + r.count;
   });
   return m;
@@ -331,44 +351,110 @@ function heatStyle(val, max, hexColor) {
 
 function buildHourlyGrid(rows) {
   const agg = aggregate(rows);
-  // Always show all 24 hours so there are no gaps
   const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2,'0') + ':00');
-  const classes = activeClasses(agg);
-  if (!classes.length) return '<p style="color:#555;padding:20px 0">No data yet</p>';
+  const hasAny = hours.some(h => agg[h] && Object.keys(agg[h]).length > 0);
+  if (!hasAny) return '<p style="color:#555;padding:20px 0">No data yet</p>';
 
-  // Find max per class for heat scaling
-  const maxPerClass = {};
-  classes.forEach(id => {
-    maxPerClass[id] = Math.max(...hours.map(h => (agg[h] && agg[h][id]) || 0));
+  // Row order: Bicycle, Vehicles, Pedestrian
+  const ROWS = [
+    { id: 1,  label: '🚲 Bicycle',    color: '#4caf50', cls: '' },
+    { id: 99, label: '🚗 Vehicles',   color: '#2196f3', cls: 'group-vehicle' },
+    { id: 0,  label: '🚶 Pedestrian', color: '#ff9800', cls: '' },
+  ];
+  const maxPerRow = {};
+  ROWS.forEach(r => {
+    maxPerRow[r.id] = Math.max(...hours.map(h => (agg[h] && agg[h][r.id]) || 0), 1);
   });
 
   let html = '<table class="hgrid"><thead><tr><th></th>';
   hours.forEach(h => { html += `<th>${h}</th>`; });
   html += '<th style="color:#aaa">Total</th></tr></thead><tbody>';
 
-  classes.forEach(id => {
-    const info = CLASS_MAP[id] || { label: 'Class ' + id, color: '#888' };
-    const rowTotal = hours.reduce((s, h) => s + ((agg[h] && agg[h][id]) || 0), 0);
-    html += `<tr><td class="type-label">${info.label}</td>`;
+  ROWS.forEach(row => {
+    const rowTotal = hours.reduce((s, h) => s + ((agg[h] && agg[h][row.id]) || 0), 0);
+    const expandIcon = row.id === 99 ? '<i class="expand-icon">▶</i>' : '';
+    const onclick    = row.id === 99 ? 'onclick="toggleVehicles(this)"' : '';
+    html += `<tr class="${row.cls}" ${onclick}>`;
+    html += `<td class="type-label">${expandIcon}${row.label}</td>`;
     hours.forEach(h => {
-      const v = (agg[h] && agg[h][id]) || 0;
-      const style = v ? heatStyle(v, maxPerClass[id], info.color) : '';
+      const v = (agg[h] && agg[h][row.id]) || 0;
+      const style = v ? heatStyle(v, maxPerRow[row.id], row.color) : '';
       html += `<td class="heat" style="${style}">${v || '·'}</td>`;
     });
-    html += `<td style="color:#aaa">${rowTotal}</td></tr>`;
+    html += `<td style="color:#aaa">${rowTotal || '·'}</td></tr>`;
+
+    // Placeholder sub-rows for vehicles (populated async on expand)
+    if (row.id === 99) {
+      Object.entries(VEHICLE_SUB).forEach(([id, info]) => {
+        html += `<tr class="vehicle-sub" data-vid="${id}">`;
+        html += `<td class="type-label">${info.label}</td>`;
+        hours.forEach(() => { html += '<td class="heat">·</td>'; });
+        html += '<td style="color:#666">·</td></tr>';
+      });
+    }
   });
 
   // Total row
   html += '<tr class="total-row"><td class="type-label">Total</td>';
   let grandTotal = 0;
   hours.forEach(h => {
-    const colTotal = classes.reduce((s, id) => s + ((agg[h] && agg[h][id]) || 0), 0);
+    const colTotal = ROWS.reduce((s, r) => s + ((agg[h] && agg[h][r.id]) || 0), 0);
     grandTotal += colTotal;
     html += `<td>${colTotal || '·'}</td>`;
   });
   html += `<td>${grandTotal}</td></tr>`;
   html += '</tbody></table>';
   return html;
+}
+
+let _vehicleDetailCache = null;
+
+async function toggleVehicles(labelCell) {
+  const row = labelCell.closest('tr');
+  const subRows = document.querySelectorAll('tr.vehicle-sub');
+  const isOpen  = row.classList.contains('expanded');
+
+  if (!isOpen) {
+    // Fetch detail if not yet loaded
+    if (!_vehicleDetailCache) {
+      try {
+        _vehicleDetailCache = await fetch('/api/hourly/vehicles').then(r => r.json());
+      } catch(e) { _vehicleDetailCache = []; }
+    }
+    // Build per-class per-hour lookup
+    const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2,'0') + ':00');
+    const detail = {};  // class_id → {hour → count}
+    _vehicleDetailCache.forEach(r => {
+      if (!detail[r.class_id]) detail[r.class_id] = {};
+      detail[r.class_id][r.label] = (detail[r.class_id][r.label] || 0) + r.count;
+    });
+    // Compute max per sub-class for heat scaling
+    const maxSub = {};
+    Object.entries(detail).forEach(([id, hmap]) => {
+      maxSub[id] = Math.max(...Object.values(hmap), 1);
+    });
+    // Populate each sub-row
+    subRows.forEach(subRow => {
+      const vid = parseInt(subRow.dataset.vid);
+      const info = VEHICLE_SUB[vid] || { color: '#888' };
+      const cells = subRow.querySelectorAll('td.heat');
+      const totalCell = subRow.querySelector('td:last-child');
+      let rowTotal = 0;
+      cells.forEach((cell, i) => {
+        const v = (detail[vid] && detail[vid][hours[i]]) || 0;
+        rowTotal += v;
+        cell.style.cssText = v ? heatStyle(v, maxSub[vid] || 1, info.color) : '';
+        cell.textContent = v || '·';
+      });
+      // Only show sub-rows that have data
+      subRow.style.display = rowTotal > 0 ? '' : 'none';
+      if (totalCell) totalCell.textContent = rowTotal || '·';
+      subRow.classList.toggle('visible', rowTotal > 0);
+    });
+  } else {
+    subRows.forEach(r => { r.classList.remove('visible'); r.style.display = ''; });
+  }
+  row.classList.toggle('expanded', !isOpen);
 }
 
 function buildDailyTable(rows) {
@@ -498,14 +584,70 @@ def api_hourly():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/hourly/vehicles")
+def api_hourly_vehicles():
+    """Return per-class vehicle breakdown for today — used by the expand drill-down."""
+    VEHICLE_CLASS_IDS = (2, 3, 5, 7, 100)
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("""
+                SELECT
+                    to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'HH24:00') AS label,
+                    direction,
+                    class_id,
+                    COUNT(*) AS cnt
+                FROM crossings
+                WHERE (ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax')::date
+                      = (NOW() AT TIME ZONE 'America/Halifax')::date
+                  AND class_id = ANY(%s)
+                GROUP BY label, direction, class_id
+                ORDER BY label
+            """, (list(VEHICLE_CLASS_IDS),))
+        else:
+            placeholders = ",".join("?" * len(VEHICLE_CLASS_IDS))
+            cur.execute(f"""
+                SELECT
+                    strftime('%H:00', ts) AS label,
+                    direction,
+                    class_id,
+                    COUNT(*) AS cnt
+                FROM crossings
+                WHERE ts >= datetime('now', '-24 hours')
+                  AND class_id IN ({placeholders})
+                GROUP BY label, direction, class_id
+                ORDER BY label
+            """, VEHICLE_CLASS_IDS)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        merged = {}
+        for label, direction, class_id, cnt in rows:
+            key = (label, int(class_id))
+            merged[key] = merged.get(key, 0) + cnt
+        result = [
+            {"label": lbl, "class_id": cid, "count": c}
+            for (lbl, cid), c in sorted(merged.items())
+        ]
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 def _consolidate_rows(rows):
-    """Merge raw DB rows into Bicycle (class_id=1) + Vehicle (class_id=99).
+    """Merge raw DB rows into Bicycle (1) + Pedestrian (0) + Vehicle (99).
     Each row is (label, direction, class_id, count).
     Returns list of dicts with keys: label, direction, class_id, count.
     """
     merged = {}  # (label, direction, consolidated_class_id) → count
     for label, direction, class_id, cnt in rows:
-        cid = 1 if class_id == 1 else 99
+        if class_id == 1:
+            cid = 1    # Bicycle
+        elif class_id == 0:
+            cid = 0    # Pedestrian
+        else:
+            cid = 99   # Vehicle (car, moped, bus, truck, scooter, etc.)
         key = (label, direction, cid)
         merged[key] = merged.get(key, 0) + cnt
     return [
