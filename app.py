@@ -151,6 +151,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh;
       padding: 24px 16px 48px;
+      position: relative;
     }
     header { text-align: center; margin-bottom: 28px; }
     header h1 { font-size: 1.8rem; font-weight: 700; }
@@ -289,7 +290,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     body.light table.hmap td.row-label { color: #555; }
 
     #theme-btn {
-      position: fixed; top: 60px; right: 16px;
+      position: absolute; top: 60px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100; transition: background 0.2s;
@@ -1251,6 +1252,7 @@ STATS_HTML = """<!DOCTYPE html>
       background: #111; color: #e0e0e0;
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh; padding: 24px 16px 48px;
+      position: relative;
     }
     header { text-align: center; margin-bottom: 28px; }
     header h1 { font-size: 1.8rem; font-weight: 700; }
@@ -1360,7 +1362,7 @@ STATS_HTML = """<!DOCTYPE html>
 
     /* theme btn */
     #theme-btn {
-      position: fixed; top: 60px; right: 16px;
+      position: absolute; top: 60px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100;
