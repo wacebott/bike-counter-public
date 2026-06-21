@@ -255,7 +255,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     body.light .section-title { color: #666; }
 
     #theme-btn {
-      position: fixed; top: 14px; right: 16px;
+      position: fixed; top: 60px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100; transition: background 0.2s;
@@ -269,7 +269,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <header>
   <h1>🚲 Bike Lane Counter</h1>
-  <p class="subtitle">Updated every 15 minutes · counts are combined in + out</p>
+  <p class="subtitle">Updated every 5 minutes</p>
 </header>
 
 <div class="stat-row">
@@ -1233,7 +1233,7 @@ STATS_HTML = """<!DOCTYPE html>
 
     /* theme btn */
     #theme-btn {
-      position: fixed; top: 14px; right: 16px;
+      position: fixed; top: 60px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100;
