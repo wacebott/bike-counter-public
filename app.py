@@ -305,6 +305,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <header>
   <h1>🚲 Bike Lane Counter</h1>
+  <p class="subtitle">Hollis St between Salter St and Bishop St.</p>
   <p class="subtitle">Updated every 5 minutes</p>
 </header>
 
@@ -349,7 +350,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
 </div>
 
-<footer>Data refreshes automatically &bull; Powered by YOLO detection</footer>
+<footer>Built by Billy English. Reach me at <a href="mailto:email@billyenglish.com" style="color:#4fc3f7">email@billyenglish.com</a></footer>
 
 <script>
 const CLASS_INFO = [
