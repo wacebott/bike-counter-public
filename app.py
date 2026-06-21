@@ -283,11 +283,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     table.hmap th { color: #666; font-weight: 400; }
     table.hmap td.row-label {
       text-align: left; color: #aaa; padding-right: 10px; font-size: 0.72rem;
+      position: sticky; left: 0; background: #1e1e1e; z-index: 1;
     }
     td.hcell { border-radius: 3px; min-width: 28px; }
     body.light .hmap-wrap { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
     body.light table.hmap th { color: #888; }
-    body.light table.hmap td.row-label { color: #555; }
+    body.light table.hmap td.row-label { color: #555; background: #fff; }
 
     #theme-btn {
       position: absolute; top: 60px; right: 16px;
@@ -1340,6 +1341,7 @@ STATS_HTML = """<!DOCTYPE html>
     table.hmap th { color: #666; font-weight: 400; }
     table.hmap td.row-label {
       text-align: left; color: #aaa; padding-right: 10px; font-size: 0.72rem;
+      position: sticky; left: 0; background: #1e1e1e; z-index: 1;
     }
     td.hcell { border-radius: 3px; min-width: 28px; }
     .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -1381,7 +1383,7 @@ STATS_HTML = """<!DOCTYPE html>
     body.light .date-check-label.checked { background: #e3f2fd; border-color: #2196f3; color: #1565c0; }
     body.light .bulk-btn { border-color: #ccc; color: #666; }
     body.light table.hmap th { color: #888; }
-    body.light table.hmap td.row-label { color: #555; }
+    body.light table.hmap td.row-label { color: #555; background: #fff; }
     body.light table.hmap { border-color: #eee; }
   </style>
 </head>
