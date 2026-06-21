@@ -291,7 +291,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     body.light table.hmap td.row-label { color: #555; background: #fff; }
 
     #theme-btn {
-      position: absolute; top: 60px; right: 16px;
+      position: absolute; top: 16px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100; transition: background 0.2s;
@@ -1365,7 +1365,7 @@ STATS_HTML = """<!DOCTYPE html>
 
     /* theme btn */
     #theme-btn {
-      position: absolute; top: 60px; right: 16px;
+      position: absolute; top: 16px; right: 16px;
       background: #2a2a2a; border: none; border-radius: 20px;
       color: #e0e0e0; font-size: 0.82rem; padding: 6px 14px;
       cursor: pointer; z-index: 100;
