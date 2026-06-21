@@ -301,7 +301,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <div id="daily-table">Loading…</div>
 </div>
 
-<footer>Data refreshes automatically &bull; Powered by YOLO detection &bull; <a href="/stats" style="color:#4fc3f7">📊 Stats</a></footer>
+<footer>Data refreshes automatically &bull; Powered by YOLO detection</footer>
 
 <script>
 const CLASS_INFO = [
@@ -1179,6 +1179,7 @@ STATS_HTML = """<!DOCTYPE html>
     .filter-btn.veh.active   { background: #0d1f3c; border-color: #2196f3; color: #2196f3; }
     .filter-btn.both.active  { background: #2a2a2a; border-color: #aaa;    color: #eee; }
     .filter-btn.avg.active   { background: #3a2a1a; border-color: #ff9800; color: #ff9800; }
+    .filter-btn.ped.active   { background: #2a1f3a; border-color: #ff9800; color: #ff9800; }
     /* date checkboxes */
     .date-checks {
       display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; max-height: 110px;
@@ -1290,9 +1291,10 @@ STATS_HTML = """<!DOCTYPE html>
   <p class="section-title">Hourly heatmap — all dates × all hours</p>
   <div class="filter-row">
     <label>Show:</label>
-    <button class="filter-btn both active" id="hm-both" onclick="setHmFilter('both')">Both</button>
+    <button class="filter-btn both active" id="hm-both" onclick="setHmFilter('both')">All</button>
     <button class="filter-btn bike" id="hm-bike" onclick="setHmFilter('bike')">🚲 Bicycles only</button>
     <button class="filter-btn veh"  id="hm-veh"  onclick="setHmFilter('veh')">🚗 Vehicles only</button>
+    <button class="filter-btn ped"  id="hm-ped"  onclick="setHmFilter('ped')">🚶 Pedestrian only</button>
   </div>
   <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
 </div>
@@ -1422,11 +1424,12 @@ function renderDailyTable(agg) {
 // ── heatmap filter ────────────────────────────────────────────────────────────
 function setHmFilter(f) {
   hmFilter = f;
-  ['both','bike','veh'].forEach(x => document.getElementById('hm-'+x).classList.toggle('active', x===f));
+  ['both','bike','veh','ped'].forEach(x => document.getElementById('hm-'+x).classList.toggle('active', x===f));
   renderHeatmap();
 }
 
 // ── heatmap render ────────────────────────────────────────────────────────────
+const PED_COLOR = '#ff9800';
 function renderHeatmap() {
   const days = Object.keys(allHourlyData).sort();
   if (!days.length) { document.getElementById('heatmap-wrap').innerHTML = '<p style="color:#555;padding:20px">No data</p>'; return; }
@@ -1436,9 +1439,10 @@ function renderHeatmap() {
     const d = allHourlyData[date][hour] || {};
     if (hmFilter === 'bike') return d[1]  || 0;
     if (hmFilter === 'veh')  return d[99] || 0;
-    return (d[1] || 0) + (d[99] || 0);
+    if (hmFilter === 'ped')  return d[0]  || 0;
+    return (d[0] || 0) + (d[1] || 0) + (d[99] || 0);
   };
-  const color = hmFilter === 'bike' ? BIKE_COLOR : hmFilter === 'veh' ? VEHICLE_COLOR : '#90a4ae';
+  const color = hmFilter === 'bike' ? BIKE_COLOR : hmFilter === 'veh' ? VEHICLE_COLOR : hmFilter === 'ped' ? PED_COLOR : '#90a4ae';
   const globalMax = Math.max(...days.flatMap(d => HOURS.map(h => cellVal(d, h))));
 
   let html = '<table class="hmap"><thead><tr><th></th>';
@@ -1652,11 +1656,11 @@ async function init() {
   renderDailyChart(dailyAgg);
   renderDailyTable(dailyAgg);
 
-  // Hourly — build allHourlyData: date → hour → {1, 99}
+  // Hourly — build allHourlyData: date → hour → {0, 1, 99}
   hourlyRes.forEach(row => {
     const date = row.date;
     const hour = row.hour;
-    const cid  = row.class_id === 1 ? 1 : 99;
+    const cid  = row.class_id === 1 ? 1 : row.class_id === 0 ? 0 : 99;
     if (!allHourlyData[date]) allHourlyData[date] = {};
     if (!allHourlyData[date][hour]) allHourlyData[date][hour] = {};
     allHourlyData[date][hour][cid] = (allHourlyData[date][hour][cid] || 0) + row.count;
@@ -1683,11 +1687,6 @@ if (localStorage.getItem('theme') === 'light') {
 </body>
 </html>
 """
-
-
-@app.route("/stats")
-def stats():
-    return render_template_string(STATS_HTML)
 
 
 @app.route("/api/hourly_all_dates")
@@ -1724,7 +1723,12 @@ def api_hourly_all_dates():
         result = []
         for row in rows:
             date, hour, class_id, cnt = row
-            cid = 1 if class_id == 1 else 99
+            if class_id == 1:
+                cid = 1
+            elif class_id == 0:
+                cid = 0
+            else:
+                cid = 99
             result.append({"date": date, "hour": hour, "class_id": cid, "count": cnt})
         return jsonify(result)
     except Exception as exc:
