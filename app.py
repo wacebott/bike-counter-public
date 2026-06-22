@@ -44,6 +44,17 @@ CREATE TABLE IF NOT EXISTS recipients (
     position INT
 );
 CREATE INDEX IF NOT EXISTS idx_recipients_position ON recipients (position);
+
+CREATE TABLE IF NOT EXISTS weather_hourly (
+    date TEXT NOT NULL,
+    hour TEXT NOT NULL,
+    temp_c REAL,
+    rain_mm REAL,
+    snow_cm REAL,
+    source TEXT NOT NULL DEFAULT 'forecast',
+    is_final BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (date, hour)
+);
 """
 
 INIT_SQL_SQLITE = """
@@ -84,6 +95,17 @@ CREATE TABLE IF NOT EXISTS sundowner_recipients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL DEFAULT '',
     number TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS weather_hourly (
+    date TEXT NOT NULL,
+    hour TEXT NOT NULL,
+    temp_c REAL,
+    rain_mm REAL,
+    snow_cm REAL,
+    source TEXT NOT NULL DEFAULT 'forecast',
+    is_final INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, hour)
 );
 """
 
@@ -350,6 +372,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <button class="filter-btn bike" id="hm-bike" onclick="setHmFilter('bike')">🚲 Bicycles only</button>
     <button class="filter-btn veh"  id="hm-veh"  onclick="setHmFilter('veh')">🚗 Vehicles only</button>
     <button class="filter-btn ped"  id="hm-ped"  onclick="setHmFilter('ped')">🚶 Pedestrian only</button>
+    <label style="margin-left:14px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px">
+      <input type="checkbox" id="hm-weather" onchange="toggleWeather(this.checked)" style="cursor:pointer">
+      <span>🌦 Weather</span>
+    </label>
   </div>
   <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
 </div>
@@ -598,6 +624,31 @@ const HM_VEHICLE_COLOR = '#2196f3';
 const HM_PED_COLOR     = '#ff9800';
 let hmFilter   = 'both';
 let hmData     = {};  // date → hour → {0, 1, 99}
+let wxData     = null;  // date → hour → {t, p}; null until first toggle
+let wxOn       = false;
+
+function wxTempColor(t) {
+  // blue (cold) → red (hot), clamped roughly -15..35 C
+  if (t === null || t === undefined) return '';
+  const lo = -15, hi = 35;
+  const f = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
+  const r = Math.round(40 + f * 200);
+  const b = Math.round(240 - f * 200);
+  const g = Math.round(80 + Math.sin(f * Math.PI) * 60);
+  return 'background:rgb(' + r + ',' + g + ',' + b + ');color:#fff;';
+}
+
+function wxEmoji(p) { return p === 'snow' ? '❄️' : (p === 'rain' ? '🌧' : ''); }
+
+async function toggleWeather(on) {
+  wxOn = on;
+  if (on && wxData === null) {
+    try {
+      wxData = await fetch('/api/weather').then(r => r.json());
+    } catch (e) { wxData = {}; }
+  }
+  renderHeatmap();
+}
 
 function heatStyle(v, max, color) {
   if (!v || !max) return '';
@@ -648,6 +699,25 @@ function renderHeatmap() {
       html += '<td class="hcell" style="' + style + '" title="' + date + ' ' + h + ': ' + v + '">' + (v || '') + '</td>';
     });
     html += '<td style="color:#666;font-size:0.7rem">' + rowSum + '</td></tr>';
+
+    // Weather row (toggle on): temp °C per hour + precip emoji, temp-colored.
+    if (wxOn && wxData) {
+      const wd = wxData[date] || {};
+      const temps = HM_HOURS.map(h => (wd[h] && wd[h].t !== null && wd[h].t !== undefined) ? wd[h].t : null).filter(t => t !== null);
+      const avg = temps.length ? Math.round(temps.reduce((a,b)=>a+b,0)/temps.length) : '';
+      html += '<tr class="wx-row"><td class="row-label" style="color:#9e9e9e;font-size:0.68rem;font-style:italic">↳ weather</td>';
+      HM_HOURS.forEach(h => {
+        const w = wd[h];
+        if (!w || w.t === null || w.t === undefined) {
+          html += '<td style="font-size:0.62rem;color:#444">·</td>';
+        } else {
+          const style = wxTempColor(w.t);
+          const em = wxEmoji(w.p);
+          html += '<td class="wx-cell" style="' + style + 'font-size:0.6rem;line-height:1.1;border-radius:3px" title="' + date + ' ' + h + ': ' + w.t + '°C' + (w.p ? ' ' + w.p : '') + '">' + w.t + '°' + (em ? '<br>' + em : '') + '</td>';
+        }
+      });
+      html += '<td style="color:#777;font-size:0.62rem">' + (avg !== '' ? avg + '°' : '') + '</td></tr>';
+    }
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
@@ -1239,6 +1309,184 @@ def api_recipients_post():
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+# ── Weather overlay (Open-Meteo, decoupled from counter) ───────────────────────
+# Pinned to Hollis St. Forecast endpoint covers recent/current; archive endpoint
+# (~5-day lag) is the accurate reanalysis used to finalize older dates.
+WX_LAT, WX_LON, WX_TZ = 44.648, -63.575, "America/Halifax"
+WX_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+WX_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+WX_ARCHIVE_LAG_DAYS = 5
+
+
+def _wx_get(url, params):
+    import urllib.request
+    import urllib.parse
+    qs = urllib.parse.urlencode(params)
+    req = urllib.request.Request(url + "?" + qs, headers={"User-Agent": "Mozilla/5.0 (bike-counter)"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _wx_parse(payload):
+    """Open-Meteo hourly payload -> list of (date, hour, temp_c, rain_mm, snow_cm)."""
+    h = payload.get("hourly") or {}
+    times = h.get("time") or []
+    temp = h.get("temperature_2m") or []
+    rain = h.get("rain") or []
+    snow = h.get("snowfall") or []
+    out = []
+    for i, t in enumerate(times):
+        # t = 'YYYY-MM-DDTHH:00'
+        date, _, hm = t.partition("T")
+        hour = (hm[:2] + ":00") if hm else None
+        if not hour:
+            continue
+        out.append((
+            date, hour,
+            temp[i] if i < len(temp) else None,
+            rain[i] if i < len(rain) else 0.0,
+            snow[i] if i < len(snow) else 0.0,
+        ))
+    return out
+
+
+def _wx_upsert(rows, source, is_final):
+    if not rows:
+        return 0
+    conn = get_conn()
+    cur = conn.cursor()
+    n = 0
+    final_val = (True if USE_POSTGRES else 1) if is_final else (False if USE_POSTGRES else 0)
+    for (date, hour, temp_c, rain_mm, snow_cm) in rows:
+        if USE_POSTGRES:
+            # Don't overwrite a row already finalized (archive truth wins, stays).
+            cur.execute(
+                """
+                INSERT INTO weather_hourly (date, hour, temp_c, rain_mm, snow_cm, source, is_final)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (date, hour) DO UPDATE SET
+                    temp_c = EXCLUDED.temp_c,
+                    rain_mm = EXCLUDED.rain_mm,
+                    snow_cm = EXCLUDED.snow_cm,
+                    source = EXCLUDED.source,
+                    is_final = EXCLUDED.is_final
+                WHERE weather_hourly.is_final = FALSE
+                """,
+                (date, hour, temp_c, rain_mm, snow_cm, source, final_val),
+            )
+        else:
+            cur.execute("SELECT is_final FROM weather_hourly WHERE date=? AND hour=?", (date, hour))
+            ex = cur.fetchone()
+            if ex and ex[0]:
+                continue
+            cur.execute(
+                """
+                INSERT INTO weather_hourly (date, hour, temp_c, rain_mm, snow_cm, source, is_final)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (date, hour) DO UPDATE SET
+                    temp_c=excluded.temp_c, rain_mm=excluded.rain_mm, snow_cm=excluded.snow_cm,
+                    source=excluded.source, is_final=excluded.is_final
+                """,
+                (date, hour, temp_c, rain_mm, snow_cm, source, final_val),
+            )
+        n += 1
+    conn.commit()
+    cur.close()
+    conn.close()
+    return n
+
+
+def _wx_count_dates():
+    """All distinct local count-dates present in crossings."""
+    conn = get_conn()
+    cur = conn.cursor()
+    if USE_POSTGRES:
+        cur.execute("""
+            SELECT DISTINCT to_char(ts::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Halifax', 'YYYY-MM-DD')
+            FROM crossings ORDER BY 1
+        """)
+    else:
+        cur.execute("SELECT DISTINCT strftime('%Y-%m-%d', ts) FROM crossings ORDER BY 1")
+    dates = [r[0] for r in cur.fetchall() if r[0]]
+    cur.close()
+    conn.close()
+    return dates
+
+
+def _wx_dates_needing_archive():
+    """Dates that exist in counts, are >= lag days old, and not yet finalized."""
+    import datetime
+    cutoff = (datetime.date.today() - datetime.timedelta(days=WX_ARCHIVE_LAG_DAYS)).isoformat()
+    conn = get_conn()
+    cur = conn.cursor()
+    # finalized dates set
+    cur.execute("SELECT DISTINCT date FROM weather_hourly WHERE is_final = %s" % ("TRUE" if USE_POSTGRES else "1"))
+    final = {r[0] for r in cur.fetchall()}
+    cur.close()
+    conn.close()
+    return [d for d in _wx_count_dates() if d <= cutoff and d not in final]
+
+
+def refresh_weather():
+    """Forecast-refresh recent days, then reconcile old dates with archive truth."""
+    summary = {"forecast_rows": 0, "archive_dates": 0, "archive_rows": 0}  # type: dict
+    # 1. Forecast: trailing 7 days + today (overwrites only non-final rows).
+    try:
+        payload = _wx_get(WX_FORECAST_URL, {
+            "latitude": WX_LAT, "longitude": WX_LON, "timezone": WX_TZ,
+            "hourly": "temperature_2m,rain,snowfall", "past_days": 7, "forecast_days": 1,
+        })
+        summary["forecast_rows"] = _wx_upsert(_wx_parse(payload), "forecast", False)
+    except Exception as exc:
+        summary["forecast_error"] = str(exc)
+    # 2. Archive reconcile for dates >= lag old and not final.
+    need = _wx_dates_needing_archive()
+    if need:
+        # batch as a single date range (min..max) to minimize calls
+        try:
+            payload = _wx_get(WX_ARCHIVE_URL, {
+                "latitude": WX_LAT, "longitude": WX_LON, "timezone": WX_TZ,
+                "hourly": "temperature_2m,rain,snowfall",
+                "start_date": min(need), "end_date": max(need),
+            })
+            parsed = [r for r in _wx_parse(payload) if r[0] in set(need)]
+            summary["archive_rows"] = _wx_upsert(parsed, "archive", True)
+            summary["archive_dates"] = len(need)
+        except Exception as exc:
+            summary["archive_error"] = str(exc)
+    return summary
+
+
+@app.route("/api/weather")
+def api_weather():
+    """Return cached weather as {date: {hour: {t: temp_c, p: 'rain'|'snow'|null}}}."""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT date, hour, temp_c, rain_mm, snow_cm FROM weather_hourly")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        out = {}
+        for date, hour, temp_c, rain_mm, snow_cm in rows:
+            precip = "snow" if (snow_cm or 0) > 0 else ("rain" if (rain_mm or 0) > 0 else None)
+            t = None if temp_c is None else round(temp_c)
+            out.setdefault(date, {})[hour] = {"t": t, "p": precip}
+        return jsonify(out)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/weather/refresh", methods=["POST"])
+def api_weather_refresh():
+    """Protected: fetch/reconcile weather. Triggered by the daily Hermes cron."""
+    api_key = os.environ.get("PUSH_API_KEY", "")
+    provided = request.headers.get("X-API-Key", "")
+    if not provided or provided != api_key:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(refresh_weather())
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
