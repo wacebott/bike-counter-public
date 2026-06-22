@@ -1317,7 +1317,9 @@ def api_recipients_post():
 WX_LAT, WX_LON, WX_TZ = 44.648, -63.575, "America/Halifax"
 WX_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 WX_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-WX_ARCHIVE_LAG_DAYS = 5
+WX_ARCHIVE_LAG_DAYS = 2  # Open-Meteo archive (ERA5T preliminary) is available ~1-2 days back.
+                         # Lag=2 corrects forecast precip errors promptly while never
+                         # finalizing today/yesterday (incomplete or not-yet-archived).
 
 
 def _wx_get(url, params):
