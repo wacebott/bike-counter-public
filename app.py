@@ -238,6 +238,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
     table.dtable th { color: #888; font-weight: 500; }
     table.dtable td:first-child { text-align: left; color: #aaa; }
+    table.dtable th:first-child, table.dtable td:first-child {
+      position: sticky; left: 0; background: #1e1e1e; z-index: 1;
+    }
     table.dtable td.bike-pct-cell { color: #81c784; font-weight: 600; }
 
     footer { text-align: center; margin-top: 40px; color: #555; font-size: 0.8rem; }
@@ -251,6 +254,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     body.light table.dtable th, body.light table.dtable td { border-bottom-color: #e0e0e0; }
     body.light table.hgrid tr.total-row td { border-top-color: #ccc; color: #111; }
     body.light table.hgrid td.type-label, body.light table.dtable td:first-child { color: #333; }
+    body.light table.dtable th:first-child, body.light table.dtable td:first-child { background: #fff; }
     body.light footer { color: #aaa; }
     body.light header p.subtitle { color: #666; }
     body.light .section-title { color: #666; }
@@ -523,7 +527,12 @@ function buildDailyTable(rows) {
     const rowTotal = classes.reduce((s, id) => s + (agg[day][id] || 0), 0);
     const bikes = agg[day][1] || 0;
     const pct = rowTotal ? ((bikes / rowTotal) * 100).toFixed(1) + '%' : '—';
-    html += `<tr><td>${day}</td>`;
+    const dow = new Date(day + 'T12:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayTag = ' <span style="font-size:0.7rem;color:#ce93d8;opacity:0.9">' + DAYS[dow] + '</span>';
+    const labelStyle = isWeekend ? 'color:#ce93d8;font-weight:600;' : '';
+    html += `<tr><td style="${labelStyle}">${day}${dayTag}</td>`;
     classes.forEach(id => {
       html += `<td>${agg[day][id] || 0}</td>`;
     });
