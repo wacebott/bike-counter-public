@@ -376,6 +376,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <input type="checkbox" id="hm-weather" onchange="toggleWeather(this.checked)" style="cursor:pointer">
       <span>🌦 Weather</span>
     </label>
+    <span id="wx-help-btn" onclick="toggleWxHelp(event)" title=""
+      style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:5px;border-radius:50%;border:1px solid #777;color:#aaa;font-size:0.7rem;cursor:pointer;position:relative">?
+      <span id="wx-help-tip" style="display:none;position:absolute;top:24px;left:50%;transform:translateX(-50%);width:240px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:8px;padding:10px 12px;font-size:0.74rem;font-weight:400;line-height:1.45;font-style:normal;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,0.5);text-align:left">Weather for the most recent day or two is preliminary and may be revised. Readings for dates older than ~2 days are reconciled against finalized historical records and are accurate.</span>
+    </span>
   </div>
   <div id="heatmap-wrap" style="overflow-x:auto">Loading…</div>
 </div>
@@ -649,6 +653,24 @@ async function toggleWeather(on) {
   }
   renderHeatmap();
 }
+
+function toggleWxHelp(ev) {
+  ev.stopPropagation();
+  const tip = document.getElementById('wx-help-tip');
+  tip.style.display = (tip.style.display === 'none') ? 'block' : 'none';
+}
+// Desktop hover + tap-anywhere-to-dismiss
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('wx-help-btn');
+  const tip = document.getElementById('wx-help-tip');
+  if (btn && tip) {
+    btn.addEventListener('mouseenter', () => { tip.style.display = 'block'; });
+    btn.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    document.addEventListener('click', (e) => {
+      if (!btn.contains(e.target)) tip.style.display = 'none';
+    });
+  }
+});
 
 function heatStyle(v, max, color) {
   if (!v || !max) return '';
