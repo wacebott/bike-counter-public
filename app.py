@@ -926,13 +926,34 @@ def api_daily():
         return jsonify({"error": str(exc)}), 500
 
 
+def _valid_event(ev):
+    """Validate + normalize one push event.
+    Returns (ts, class_id, track_id, direction, confidence) or None.
+    Guards the poison-pill: a single non-ISO ts stored raw would break every
+    ts::timestamp cast and permanently 500 all dashboard read endpoints."""
+    try:
+        ts = str(ev["ts"])
+        datetime.fromisoformat(ts)  # raises ValueError if not ISO-8601
+        direction = str(ev["direction"])
+        if direction not in ("in", "out"):
+            return None
+        class_id = int(ev["class_id"])
+        track_id = int(ev["track_id"])
+        confidence = float(ev["confidence"])
+        if not (0.0 <= confidence <= 1.0):  # also rejects NaN
+            return None
+        return (ts, class_id, track_id, direction, confidence)
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 @app.route("/api/push", methods=["POST"])
 def api_push():
     """Receive a batch of crossing events from the local counter."""
     # Auth
     api_key = os.environ.get("PUSH_API_KEY", "")
     provided = request.headers.get("X-API-Key", "")
-    if not provided or provided != api_key:
+    if not api_key or not provided or not hmac.compare_digest(provided.encode(), api_key.encode()):
         return jsonify({"error": "Unauthorized"}), 401
 
     # Parse body
@@ -945,13 +966,15 @@ def api_push():
         return jsonify({"error": "Malformed request body"}), 400
 
     # Validate & insert
-    required_keys = {"ts", "class_id", "track_id", "direction", "confidence"}
     try:
         conn = get_conn()
         cur = conn.cursor()
         inserted = 0
+        skipped = 0
         for ev in events:
-            if not required_keys.issubset(ev.keys()):
+            norm = _valid_event(ev)
+            if norm is None:
+                skipped += 1
                 continue  # skip malformed individual events
             try:
                 if USE_POSTGRES:
@@ -961,8 +984,7 @@ def api_push():
                         VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (ts, track_id, direction) DO NOTHING
                         """,
-                        (ev["ts"], int(ev["class_id"]), int(ev["track_id"]),
-                         str(ev["direction"]), float(ev["confidence"]))
+                        norm
                     )
                 else:
                     cur.execute(
@@ -971,17 +993,18 @@ def api_push():
                             (ts, class_id, track_id, direction, confidence)
                         VALUES (?, ?, ?, ?, ?)
                         """,
-                        (ev["ts"], int(ev["class_id"]), int(ev["track_id"]),
-                         str(ev["direction"]), float(ev["confidence"]))
+                        norm
                     )
                 if cur.rowcount > 0:
                     inserted += 1
             except Exception:
-                pass  # skip individual bad rows
+                skipped += 1  # skip individual bad rows
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({"inserted": inserted}), 200
+        if skipped:
+            app.logger.warning("api_push: skipped %d invalid event(s)", skipped)
+        return jsonify({"inserted": inserted, "skipped": skipped}), 200
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -1194,26 +1217,29 @@ def api_review_push():
     except Exception:
         return jsonify({"error": "Malformed request body"}), 400
 
-    required = {"local_id", "ts", "class_id", "track_id", "direction", "confidence"}
     conn = get_conn(); cur = conn.cursor(); upserted = 0
     try:
         for ev in events:
-            if not required.issubset(ev.keys()):
+            norm = _valid_event(ev)
+            if norm is None or "local_id" not in ev:
                 continue
+            try:
+                local_id = int(ev["local_id"])
+            except (ValueError, TypeError):
+                continue
+            ts, class_id, track_id, direction, confidence = norm
             try:
                 if USE_POSTGRES:
                     cur.execute(
                         "INSERT INTO review_queue (local_id,ts,class_id,track_id,direction,confidence,status) "
                         "VALUES (%s,%s,%s,%s,%s,%s,'pending') ON CONFLICT (local_id) DO NOTHING",
-                        (int(ev["local_id"]), ev["ts"], int(ev["class_id"]), int(ev["track_id"]),
-                         str(ev["direction"]), float(ev["confidence"]))
+                        (local_id, ts, class_id, track_id, direction, confidence)
                     )
                 else:
                     cur.execute(
                         "INSERT OR IGNORE INTO review_queue (local_id,ts,class_id,track_id,direction,confidence,status) "
                         "VALUES (?,?,?,?,?,?,'pending')",
-                        (int(ev["local_id"]), ev["ts"], int(ev["class_id"]), int(ev["track_id"]),
-                         str(ev["direction"]), float(ev["confidence"]))
+                        (local_id, ts, class_id, track_id, direction, confidence)
                     )
                 if cur.rowcount > 0:
                     upserted += 1
