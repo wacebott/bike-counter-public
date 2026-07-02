@@ -1,5 +1,7 @@
 import os
 import json
+import re
+import hmac
 from datetime import datetime, timezone
 from flask import Flask, jsonify, request, render_template_string
 
@@ -989,7 +991,9 @@ def api_push():
 def check_push_key():
     api_key = os.environ.get("PUSH_API_KEY", "")
     provided = request.headers.get("X-API-Key", "")
-    return bool(provided and provided == api_key)
+    if not api_key or not provided:
+        return False
+    return hmac.compare_digest(provided.encode(), api_key.encode())
 
 
 def check_review_key():
@@ -1295,7 +1299,9 @@ def api_review_decisions():
 
 @app.route("/api/recipients", methods=["GET"])
 def api_recipients_get():
-    """Return recipients ordered by position. No auth — Tailscale-trusted only."""
+    """Return recipients ordered by position. Auth: X-API-Key (PUSH_API_KEY)."""
+    if not check_push_key():
+        return jsonify({"error": "unauthorized"}), 401
     try:
         conn = get_conn(); cur = conn.cursor()
         cur.execute("SELECT name, phone, position FROM recipients ORDER BY position")
@@ -1307,10 +1313,21 @@ def api_recipients_get():
 
 @app.route("/api/recipients", methods=["POST"])
 def api_recipients_post():
-    """Replace all recipients. Accepts [{name, phone, position}]. No auth — Tailscale-trusted."""
-    data = request.get_json(force=True, silent=True)
+    """Replace all recipients. Accepts [{name, phone, position}] or {"recipients": [...]}.
+    Auth: X-API-Key (PUSH_API_KEY)."""
+    if not check_push_key():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        data = data.get("recipients")
     if not isinstance(data, list):
         return jsonify({"error": "Expected a JSON array"}), 400
+    if len(data) > 10:
+        return jsonify({"error": "Too many recipients (max 10)"}), 400
+    _e164 = re.compile(r"^\+[1-9]\d{6,14}$")
+    for r in data:
+        if not isinstance(r, dict) or not _e164.match(str(r.get("phone", "")).strip()):
+            return jsonify({"error": f"Invalid phone format (E.164 required): {r!r:.80}"}), 400
     try:
         conn = get_conn(); cur = conn.cursor()
         if USE_POSTGRES:
